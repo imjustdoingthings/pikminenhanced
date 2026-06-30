@@ -1,0 +1,8 @@
+"pikicave"
+{
+	"base"			"sandbox"
+	"title"			"Treasure Hunt"
+	"maps"			"^piki_"
+	"category"		"other"
+	"menusystem" 		"1"
+}

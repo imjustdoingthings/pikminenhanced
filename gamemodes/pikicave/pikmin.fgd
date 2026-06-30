@@ -1,0 +1,79 @@
+@include "base.fgd"
+@include "halflife2.fgd"
+
+@BaseClass base(Origin, Angles) = basepikmin [
+	model(choices) : "Type" : "models/pikmin/pikmin_red1.mdl" =
+	[
+		"models/pikmin/pikmin_red1.mdl" : "Red Leaf"
+		"models/pikmin/pikmin_red2.mdl" : "Red Bud"
+		"models/pikmin/pikmin_red3.mdl" : "Red Flower"
+		
+		"models/pikmin/pikmin_yellow1.mdl" : "Yellow Leaf"
+		"models/pikmin/pikmin_yellow2.mdl" : "Yellow Bud"
+		"models/pikmin/pikmin_yellow3.mdl" : "Yellow Flower"
+		
+		"models/pikmin/pikmin_blue1.mdl" : "Blue Leaf"
+		"models/pikmin/pikmin_blue2.mdl" : "Blue Bud"
+		"models/pikmin/pikmin_blue3.mdl" : "Blue Flower"
+		
+		"models/pikmin/pikmin_purple1.mdl" : "Purple Leaf"
+		"models/pikmin/pikmin_purple2.mdl" : "Purple Bud"
+		"models/pikmin/pikmin_purple3.mdl" : "Purple Flower"
+		
+		"models/pikmin/pikmin_white1.mdl" : "White Leaf"
+		"models/pikmin/pikmin_white2.mdl" : "White Bud"
+		"models/pikmin/pikmin_white3.mdl" : "White Flower"
+	]
+]
+
+@PointClass base(basepikmin) studio() = pikmin : "Pikmin" []
+
+@PointClass base(Targetname, Origin, Angles, RenderFields) studio("models/pikmin/onion.mdl") = pikmin_onion : "Onion" [
+	land(boolean) : "Land" : 0 : "Play the landing animation if possible"
+	data(string) : "Pikmin Data" : ""
+	skin(choices) : "Onion Type" : 2 =
+	[
+		2 : "Red"
+		1 : "Yellow"
+		0 : "Blue"
+	]
+	
+	output OnReturn(integer) : "Fires when Pikmin enter the onion"
+	output OnCall(integer) : "Fires when Pikmin leave the onion"
+	output OnCreate(integer) : "Fires when new Pikmin are created"
+]
+
+@PointClass base(basepikmin) studio() = pikmin_sprout : "Pikmin (Sprout)" [
+	output OnPlucked(void) : "Fires when the Pikmin	is plucked"
+]
+
+@BaseClass base(Targetname, Origin, Angles) = basehazard [
+	input Destroy(void) : "Destroy the hazard"
+	output OnDeath(void) : "Fires when the hazard is destroyed"
+	output OnIdle(void) : "Fires after the hazard has finished emitting"
+	output OnActivated(void) : "Fires when the hazard activates"
+]
+
+@PointClass base(basehazard) studioprop("models/pikmin/firehiba.mdl") = pikmin_fire : "Fire Geyser" [
+	input Activate(void) : "Forcibly activates the hazard"
+]
+
+@PointClass base(basehazard) studioprop("models/pikmin/gashiba.mdl") = pikmin_gas : "Gas Pipe" []
+
+@PointClass base(basehazard) studioprop("models/pikmin/wirehiba.mdl") = pikmin_wire : "Electrical Wire" [
+	target(target_destination) : "Linked Wire" : : "The name of the wire that will link up with this one (not required)"
+	input Activate(void) : "Forcibly activates the hazard"
+	input ActivateWith(target_destination) : "Forcibly activates the hazard with the given target"
+	repeat(boolean) : "Constant" : 0 : "If set, the wire will never stop emitting once activated"
+]
+
+@PointClass base(Targetname, Origin, Angles, RenderFields) studio("models/pikmin/pom.mdl") = pikmin_bud : "Candypop Bud" [
+	skin(choices) : "Type" : 0 =
+	[
+		0 : "Red"
+		1 : "Yellow"
+		2 : "Blue"
+		3 : "Purple"
+		4 : "White"
+	]
+]

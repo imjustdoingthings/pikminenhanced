@@ -1,0 +1,7 @@
+"UnlitGeneric"
+{
+	"$basetexture" "pikmin/death_soul"
+	"$vertexcolor" "1"
+	"$vertexalpha" "1"
+	"$nolod" "1"
+}
