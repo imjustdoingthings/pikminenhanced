@@ -28,6 +28,8 @@ hook.Add("PopulateToolMenu","PikiToolMenu",function()
 		local classicbox = panel:CheckBox("#pikimenu.classicpluck","pik_classicpluck")
 		local disbandbox = panel:CheckBox("#pikimenu.disband","pik_disband")
 		panel:ControlHelp("#pikimenu.disband2")
+		local poisongasbox = panel:CheckBox("#pikimenu.whitegas","pik_white_poisongas")
+		panel:ControlHelp("#pikimenu.whitegas2")
 		
 		local htab,dtab = {},{}
 		

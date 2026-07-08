@@ -256,6 +256,8 @@ CreateConVar("pik_idle","1",{FCVAR_REPLICATED},"Play Pikmin idle sounds")
 CreateConVar("pik_classicpluck","0",{FCVAR_REPLICATED},"Use classic Pikmin spawn sounds")
 CreateConVar("pik_admin","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Restrict Pikmin entities to admins")
 CreateConVar("pik_disband","1",{FCVAR_REPLICATED},"enable Pikmin grouping on disband")
+CreateConVar("pik_white_poisongas","1",{FCVAR_REPLICATED},"Enable White Pikmin poison gas on death")
+
 
 local PikminAdminRestrictedClasses = {
 	["pikmin"] = true,

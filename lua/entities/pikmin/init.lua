@@ -732,7 +732,7 @@ function ENT:OnTakeDamage(DMGInfo)
 	
 	self.PikHP = self.PikHP - dmg
 	if self.PikHP <= 0 then
-		if self.Color == 5 and not self.Shock then --Poison the bastards that killed us
+		if self.Color == 5 and not self.Shock and cvars.Bool("pik_white_poisongas") then --Poison the bastards that killed us
 			local ef = EffectData()
 			ef:SetOrigin(self:GetPos())
 			util.Effect("pikmin_poison", ef)
