@@ -341,7 +341,7 @@ local function PikSWepKeyPress(ply, key)
 				for _,v in ipairs(ents.FindByClass("pikmin")) do
 					if v.Olimar == ply and not v.AttackTarget and not v.Drowning and not v:IsOnFire() and not v.Carrying and not v.Called then
 						disbanded = true
-						if v:GetPos():Distance(pos) >= 400 or v.Thrown or math.abs((v:GetPos()-pos)[3]) >= 120 or forward:Dot((pos-v:GetPos()):GetNormalized()) > 0 then
+						if v:GetPos():Distance(pos) >= 400 or v.Thrown or math.abs((v:GetPos()-pos)[3]) >= 120 then
 							v:Disband()
 						else
 							if not table.KeyFromValue(typeArray,v.Color) then
@@ -385,22 +385,46 @@ local function PikSWepKeyPress(ply, key)
 				
 				sepDist = sepDist-math.Clamp(ply:EyeAngles().X-40,0,45)/2
 				
+				-- calculate disband direction from the relative position of the squad being grouped
+				-- it be working
+				local avgPos = Vector(0,0,0)
+				local count = 0
+				for _,v in ipairs(pikiArray) do
+					avgPos = avgPos + v:GetPos()
+					count = count + 1
+				end
+				
+				local disbandDir = forward
+				local disbandRight = eyeangles:Right()
+				if count > 0 then
+					avgPos = avgPos / count
+					local dir = avgPos - pos
+					dir.z = 0
+					if dir:LengthSqr() > 1 then
+						disbandDir = dir:GetNormalized()
+						disbandRight = Vector(disbandDir.y, -disbandDir.x, 0)
+					end
+				end
+				
 				if typeCount == 1 then
 					for _,v in ipairs(pikiArray) do
 						v:Disband()
 					end
 				else
 					local posArray = {}
-					local basePos = pos + forward*forDist
+					local basePos = pos + disbandDir*forDist
 					local slice = 2 * math.pi / typeCount
-					local right = eyeangles:Right()
 					for i=0,typeCount-1 do
 						local angle = slice * i
-						table.insert(posArray,basePos+right*sepDist*math.cos(angle)+forward*sepDist*math.sin(angle))
+						table.insert(posArray,basePos+disbandRight*sepDist*math.cos(angle)+disbandDir*sepDist*math.sin(angle))
 					end
 					for k,typ in ipairs(typeArray) do
 						for _,v in ipairs(typeDict[typ]) do
-							v:Disband(posArray[k])
+							if v.Color == 7 then 
+								v:Disband() -- Winged Pikmin are not going to move if you disband them
+							else
+								v:Disband(posArray[k])
+							end
 						end
 					end
 				end
