@@ -376,11 +376,14 @@ local function PikSWepKeyPress(ply, key)
 					end
 				end
 				if typeCount == 2 then
-					sepDist = 75
-					forDist = 120
+					sepDist = 140
+					forDist = 180
 				elseif typeCount == 3 then
-					sepDist = 90
-					forDist = 140
+					sepDist = 160
+					forDist = 200
+				elseif typeCount >= 4 then
+					sepDist = 180 + (typeCount - 4) * 25
+					forDist = 220 + (typeCount - 4) * 20
 				end
 				
 				sepDist = sepDist-math.Clamp(ply:EyeAngles().X-40,0,45)/2
