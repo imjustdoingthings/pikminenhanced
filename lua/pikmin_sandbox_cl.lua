@@ -31,32 +31,96 @@ hook.Add("PopulateToolMenu","PikiToolMenu",function()
 		local poisongasbox = panel:CheckBox("#pikimenu.whitegas","pik_white_poisongas")
 		panel:ControlHelp("#pikimenu.whitegas2")
 		
-		local htab,dtab = {},{}
-		
-		panel:Help("#pikimenu.health"):SetFont("DermaLarge")
-		for i=1,PikTypes do
-			local n = panel:NumSlider("#pikmin"..i,"pik_health"..i,1,100,0)
-			n:SetDefaultValue(PikHealth[i])
-			table.insert(htab,n)
-		end
-		
-		panel:Help("#pikimenu.damage"):SetFont("DermaLarge")
-		for i=1,PikTypes do
-			local n = panel:NumSlider("#pikmin"..i,"pik_damage"..i,0,40,0)
-			n:SetDefaultValue(PikDamage[i])
-			table.insert(dtab,n)
+		local pikiSettingsBtn = panel:Button("Pikmin Settings", "")
+		function pikiSettingsBtn:DoClick()
+			local frame = vgui.Create("DFrame")
+			frame:SetTitle("Pikmin Settings")
+			frame:SetSize(400, 600)
+			frame:Center()
+			frame:MakePopup()
+			
+			local scroll = vgui.Create("DScrollPanel", frame)
+			scroll:Dock(FILL)
+			
+			local bottom = vgui.Create("DPanel", frame)
+			bottom:Dock(BOTTOM)
+			bottom:SetHeight(40)
+			bottom:SetPaintBackground(false)
+			
+			local hsliders, dsliders, ssliders = {}, {}, {}
+			
+			for i = 1, PikTypes do
+				local typePanel = scroll:Add("DPanel")
+				typePanel:Dock(TOP)
+				typePanel:SetHeight(130)
+				typePanel:DockMargin(5, 5, 5, 5)
+				function typePanel:Paint(w, h)
+					draw.RoundedBox(4, 0, 0, w, h, Color(240, 240, 240, 255))
+				end
+				
+				local label = vgui.Create("DLabel", typePanel)
+				label:SetText(language.GetPhrase("pikmin" .. i))
+				label:SetFont("DermaDefaultBold")
+				label:Dock(TOP)
+				label:DockMargin(10, 5, 10, 2)
+				label:SetTextColor(Color(50, 50, 50))
+				
+				-- Health
+				local hSlider = vgui.Create("DNumSlider", typePanel)
+				hSlider:SetText("Health")
+				hSlider:SetConVar("pik_health" .. i)
+				hSlider:SetMinMax(1, 100)
+				hSlider:SetDecimals(0)
+				hSlider:Dock(TOP)
+				hSlider:DockMargin(15, 0, 15, 0)
+				hSlider:SetDefaultValue(PikHealth[i])
+				hSlider:SetDark(true)
+				hsliders[i] = hSlider
+				
+				-- Damage
+				local dSlider = vgui.Create("DNumSlider", typePanel)
+				dSlider:SetText("Damage")
+				dSlider:SetConVar("pik_damage" .. i)
+				dSlider:SetMinMax(0, 40)
+				dSlider:SetDecimals(0)
+				dSlider:Dock(TOP)
+				dSlider:DockMargin(15, 0, 15, 0)
+				dSlider:SetDefaultValue(PikDamage[i])
+				dSlider:SetDark(true)
+				dsliders[i] = dSlider
+
+				-- Speed
+				local sSlider = vgui.Create("DNumSlider", typePanel)
+				sSlider:SetText("Base Speed")
+				sSlider:SetConVar("pik_speed" .. i)
+				sSlider:SetMinMax(50, 3000)
+				sSlider:SetDecimals(0)
+				sSlider:Dock(TOP)
+				sSlider:DockMargin(15, 0, 15, 0)
+				sSlider:SetDefaultValue(PikSpeed[i])
+				sSlider:SetDark(true)
+				ssliders[i] = sSlider
+			end
+			
+			local rbtn = vgui.Create("DButton", bottom)
+			rbtn:SetText("Reset All")
+			rbtn:Dock(FILL)
+			rbtn:DockMargin(5, 5, 5, 5)
+			function rbtn:DoClick()
+				for i = 1, PikTypes do
+					hsliders[i]:SetValue(PikHealth[i])
+					dsliders[i]:SetValue(PikDamage[i])
+					ssliders[i]:SetValue(PikSpeed[i])
+				end
+			end
 		end
 		
 		local btn = panel:Button("#pikimenu.reset","")
 		function btn:DoClick()
-			for i=1,PikTypes do
-				htab[i]:SetValue(PikHealth[i])
-				dtab[i]:SetValue(PikDamage[i])
-			end
 			n:SetValue(PikiMaxField)
 		end
 		
-		local btn = panel:Button("#pikimenu.reset2","pikmin_oreset")
+		local btn2 = panel:Button("#pikimenu.reset2","pikmin_oreset")
 	end)
 end)
 

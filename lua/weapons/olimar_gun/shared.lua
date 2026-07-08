@@ -500,10 +500,13 @@ local function PikSWepKeyRelease(ply, key)
 				local forceMult = 0.8+math.min(0.3,CurTime()-ply:GetActiveWeapon().ThrowTick)
 				local phys = throwpikmin:GetPhysicsObject()
 				throwpikmin.ThrowNext = CurTime() + 1
+				local right = ply:EyeAngles():Right()
+				local up = ply:EyeAngles():Up()
+				local offset = right * 10 - up * 8 + aimVector * 20
 				if aimVector.Z < -0.4 then
-					throwpikmin:SetPos((ply:GetShootPos() - Vector(0,0,16) + (aimVector * 25)))
+					throwpikmin:SetPos((ply:GetShootPos() - Vector(0,0,16) + offset))
 				else
-					throwpikmin:SetPos((ply:GetShootPos() + (aimVector * 25)))
+					throwpikmin:SetPos((ply:GetShootPos() + offset))
 				end
 				timer.Simple(0,function() throwpikmin:StopSound(throwpikmin.Color == 7 and "pikmin/pikmin_pink_grab.wav" or throwpikmin.Color == 8 and "pikmin/pikmin_rock_grab.wav" or "pikmin/grab.wav") end)
 				local throwSound = throwpikmin.Color == 2 and "pikmin/pikmin_yellow_throw.wav" or throwpikmin.Color == 7 and "pikmin/pikmin_pink_throw.wav" or throwpikmin.Color == 8 and ("pikmin/pikmin_rock_throw" .. math.random(1, 2) .. ".wav") or "pikmin/pikmin_throw.wav"
@@ -605,3 +608,86 @@ end
 SWEP.ViewModel = ("models/weapons/v_olimar.mdl")
 SWEP.WorldModel = ("models/weapons/w_olimar.mdl")
 -----------------------------------------------
+
+-- suggestion from basketcat54 to implement the trajectory arc
+-- This just uses a beam and a little bit of math.
+
+if CLIENT then
+	hook.Add("PostDrawTranslucentRenderables", "PikiTrajectoryArc", function()
+		local ply = LocalPlayer() if not IsValid(ply) then return end
+		local wep = ply:GetActiveWeapon() if not IsValid(wep) or wep:GetClass() ~= "olimar_gun" then return end
+
+		local heldpiki = ply:GetNWEntity("piki")
+		if not IsValid(heldpiki) or heldpiki == ply then wep.ClientThrowTick = nil return end
+
+		if not wep.ClientThrowTick then wep.ClientThrowTick = CurTime() end
+
+		local aimVector = ply:GetAimVector()
+		local pikiColor = 1
+		for _, child in ipairs(heldpiki:GetChildren()) do
+			if child:GetClass() == "pikmin_model" then
+				pikiColor = child:GetNWInt("Color", 1)
+				break
+			end
+		end
+		local force = pikiColor == 2 and 56 or pikiColor == 7 and 50 or 40
+		local forceMult = 0.8 + math.min(0.3, CurTime() - wep.ClientThrowTick)
+
+		local mass = 10
+		local vel = (aimVector * (force * forceMult) + Vector(0,0,5)) * (125 / mass)
+
+		local right = ply:EyeAngles():Right()
+		local up = ply:EyeAngles():Up()
+		local offset = right * 10 - up * 8 + aimVector * 20
+
+		local startPos
+		if aimVector.Z < -0.4 then
+			startPos = ply:GetShootPos() - Vector(0,0,16) + offset
+		else
+			startPos = ply:GetShootPos() + offset
+		end
+		
+		local points = {}
+		table.insert(points, startPos)
+
+		local currentPos = startPos
+		local currentVel = vel
+		local gravity = Vector(0, 0, -GetConVar("sv_gravity"):GetFloat())
+		local dt = 0.03
+		local maxSteps = 45
+		local hitPos, hitNormal
+
+		for i = 1, maxSteps do
+			local nextPos = currentPos + currentVel * dt
+			local tr = util.TraceLine({
+				start = currentPos,
+				endpos = nextPos,
+				filter = {ply, heldpiki}
+			})
+			if tr.Hit then
+				table.insert(points, tr.HitPos)
+				hitPos = tr.HitPos
+				hitNormal = tr.HitNormal
+				break
+			else
+				table.insert(points, nextPos)
+			end
+			currentVel = currentVel + gravity * dt
+			currentPos = nextPos
+		end
+
+		local col = DisbandColors[pikiColor] or Color(255, 255, 255, 255)
+		render.SetColorMaterial()
+		render.StartBeam(#points)
+		for i, pt in ipairs(points) do
+			render.AddBeam(pt, 2.0, i / #points, col)
+		end
+		render.EndBeam()
+
+		if hitPos and hitNormal then
+			render.SetMaterial(Material("particle/particle_ring_wave_additive"))
+			local size = 20 + math.sin(CurTime() * 8) * 4 -- This helps us find where the Pikmin wind up better
+			render.DrawQuadEasy(hitPos + hitNormal * 0.5, hitNormal, size, size, col, 0) -- just like in the games, the end circle casts to surfaces on the wall too
+		end
+	end)
+end

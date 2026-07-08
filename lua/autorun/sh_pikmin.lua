@@ -65,6 +65,18 @@ PikDamage = {
 15
 }
 
+PikSpeed = {
+	700,
+	700,
+	700,
+	600,
+	1000,
+	700,
+	700,
+	600,
+	700
+}
+
 --converting real pikmin damage to more source-appropriate damage
 PikDamageDivider = 6
 
@@ -297,6 +309,7 @@ end
 for i=1,PikTypes do
 	CreateConVar("pik_damage"..i,tostring(PikDamage[i]),{FCVAR_REPLICATED},PikDefaultTypeNames[i].." Damage")
 	CreateConVar("pik_health"..i,tostring(PikHealth[i]),{FCVAR_REPLICATED},PikDefaultTypeNames[i].." Health")
+	CreateConVar("pik_speed"..i,tostring(PikSpeed[i]),{FCVAR_REPLICATED},PikDefaultTypeNames[i].." Base Speed")
 	if SERVER then
 		cvars.AddChangeCallback("pik_damage"..i, function(name,ov,nv)
 			nv = math.Clamp(math.floor(tonumber(nv) or 0),0,40)
@@ -313,6 +326,15 @@ for i=1,PikTypes do
 			for _,v in ipairs(ents.FindByClass("pikmin")) do
 				if v.Color ~= i then continue end
 				if v.PikHP >= ov then v.PikHP = nv end
+			end
+		end)
+		cvars.AddChangeCallback("pik_speed"..i, function(name,ov,nv)
+			nv = math.Clamp(math.floor(tonumber(nv) or 0),50,3000)
+			PikSpeed[i] = nv
+			for _,v in ipairs(ents.FindByClass("pikmin")) do
+				if v.Color ~= i then continue end
+				v.BaseMoveForce = nv
+				v.MoveForce = v.BaseMoveForce + v.Level*(v.Color == 5 and 320 or (v.Color == 4 or v.Color == 8) and 150 or 250)
 			end
 		end)
 	end

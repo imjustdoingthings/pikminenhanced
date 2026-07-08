@@ -80,7 +80,7 @@ function ENT:Initialize()
 	self.NextAI = CurTime()
 	self.ThrowNext = CurTime()
 	self.IdleSoundNext = CurTime() + math.random(5, 10)
-	self.BaseMoveForce = (self.Color == 4 or self.Color == 8) and 600 or self.Color == 5 and 1000 or 700
+	self.BaseMoveForce = GetConVar("pik_speed" .. self.Color):GetFloat()
 	self.MoveForce = self.BaseMoveForce + self.Level*(self.Color == 5 and 320 or (self.Color == 4 or self.Color == 8) and 150 or 250)
 	self.ZForceVector = (self.Color == 4 or self.Color == 8) and Vector(0,0,425) or self.Color == 7 and Vector(0,0,0) or Vector(0,0,325)
 	self.JumpVector = Vector(0,0,(self.Color == 4 or self.Color == 8) and 2000 or 1750)
@@ -300,6 +300,10 @@ end
 
 function ENT:Think()
 	if self.Dead then return end
+	if self.LastNWThrown ~= self.Thrown then
+		self.LastNWThrown = self.Thrown
+		self:SetNWBool("Thrown", self.Thrown)
+	end
 	if not self.Dismissed and not self.Attacking and (not IsValid(self.Olimar) or not self.Olimar:Alive()) then self:Disband() end
 	if not IsValid(self.AttackTarget) or self.AttackTarget.PikIgnore then self.AttackTarget = nil end
 	
@@ -948,7 +952,7 @@ function ENT:PostEntityPaste(ply,ent,created)
 		self.PikMdl:SetNWInt("Level",math.min(2,self.Level))
 		self.PikMdl:SetModel(ColorModelTable[(self.Color-1)*3+1+self.Level])
 		self.PikMdl.Cycle = pikinfo.Cycle
-		self.BaseMoveForce = (self.Color == 4 or self.Color == 8) and 600 or self.Color == 5 and 1000 or 700
+		self.BaseMoveForce = GetConVar("pik_speed" .. self.Color):GetFloat()
 		self.MoveForce = self.BaseMoveForce + self.Level*(self.Color == 5 and 320 or (self.Color == 4 or self.Color == 8) and 150 or 250)
 		self.ZForceVector = (self.Color == 4 or self.Color == 8) and Vector(0,0,425) or self.Color == 7 and Vector(0,0,0) or Vector(0,0,325)
 		self.JumpVector = Vector(0,0,(self.Color == 4 or self.Color == 8) and 2000 or 1750)
