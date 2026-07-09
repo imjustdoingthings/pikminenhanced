@@ -72,6 +72,7 @@ function SWEP:Holster()
 		self.Owner.SwarmVec = nil
 		self.Swarm = false
 		self.Whistling = false
+		self:SetNWBool("Whistling", false)
 		self.WhistleSound:Stop()
 		self.SwarmSound:Stop()
 		self:SendWeaponAnim(ACT_VM_HOLSTER)
@@ -80,12 +81,16 @@ function SWEP:Holster()
 end
 
 function SWEP:OnRemove()
-	if self.Swarm then self.Owner:SetSlowWalkSpeed(self.Owner.SlowSpeed) end
-	self.Owner.SwarmVec = nil
+	if self.Swarm and IsValid(self.Owner) then self.Owner:SetSlowWalkSpeed(self.Owner.SlowSpeed) end
+	if IsValid(self.Owner) then self.Owner.SwarmVec = nil end
 	self.Swarm = false
 	self.Whistling = false
-	self.WhistleSound:Stop()
-	self.SwarmSound:Stop()
+	if self.WhistleSound then self.WhistleSound:Stop() end
+	if self.SwarmSound then self.SwarmSound:Stop() end
+	if CLIENT and self.WhistleEmitter and self.WhistleEmitter:IsValid() then
+		self.WhistleEmitter:Finish()
+		self.WhistleEmitter = nil
+	end
 end
 
 function SWEP:PrimaryAttack()
@@ -150,11 +155,22 @@ function SWEP:Think()
 		if diffTime > 1.25 then
 			self.WhistleSound:Stop()
 			self.Whistling = false
+			self:SetNWBool("Whistling", false)
 			self:SendWeaponAnim(ACT_VM_IDLE)
 		end
-		local tr = util.QuickTrace(self.Owner:GetShootPos(), self.Owner:GetAimVector() * 750, {self.Owner, self})
+		local owner = self.Owner
+		local tr = util.TraceLine({
+			start = owner:GetShootPos(),
+			endpos = owner:GetShootPos() + owner:GetAimVector() * 750,
+			filter = function(ent)
+				if IsValid(ent) and (ent:GetClass() == "pikmin" or ent:GetClass() == "pikmin_sprout") then
+					return false
+				end
+				return ent ~= owner and ent ~= self
+			end
+		})
 		if tr.Hit then
-			local whistleRange = 10 + diffTime*150
+			local whistleRange = (10 + diffTime*150) * 1.75
 			local hasPluck = self.Owner:GetNWBool("pikipluck",false)
 			if hasPluck then
 				for _,v in ipairs(ents.FindByClass("pikmin_sprout")) do
@@ -465,11 +481,14 @@ local function PikSWepKeyPress(ply, key)
 			if timer.Exists("OlimarGunIdleCharge"..ply:GetActiveWeapon():EntIndex()) then
 				timer.Remove("OlimarGunIdleCharge"..ply:GetActiveWeapon():EntIndex())
 			end
-			ply:GetActiveWeapon():SendWeaponAnim(ACT_VM_RELOAD)
-			ply:GetActiveWeapon().WhistleTime = CurTime()
-			ply:GetActiveWeapon().Whistling = true
-			ply:GetActiveWeapon().WhistleSound:Stop()
-			ply:GetActiveWeapon().WhistleSound:Play()
+			local activeWep = ply:GetActiveWeapon()
+			activeWep:SendWeaponAnim(ACT_VM_RELOAD)
+			activeWep.WhistleTime = CurTime()
+			activeWep.Whistling = true
+			activeWep:SetNWBool("Whistling", true)
+			activeWep:SetNWFloat("WhistleStart", CurTime())
+			activeWep.WhistleSound:Stop()
+			activeWep.WhistleSound:Play()
 		end
 	elseif key == IN_WALK then
 		ply.SlowSpeed = ply:GetSlowWalkSpeed()
@@ -524,10 +543,12 @@ local function PikSWepKeyRelease(ply, key)
 			end
 		end
 	elseif key == IN_RELOAD then
-		if ply:GetActiveWeapon().Whistling then
-			ply:GetActiveWeapon().Whistling = false
-			ply:GetActiveWeapon().WhistleSound:FadeOut(0.2)
-			ply:GetActiveWeapon():SendWeaponAnim(ACT_VM_IDLE)
+		local activeWep = ply:GetActiveWeapon()
+		if IsValid(activeWep) and activeWep.Whistling then
+			activeWep.Whistling = false
+			activeWep:SetNWBool("Whistling", false)
+			activeWep.WhistleSound:FadeOut(0.2)
+			activeWep:SendWeaponAnim(ACT_VM_IDLE)
 		end
 	elseif key == IN_WALK then
 		ply:SetSlowWalkSpeed(ply.SlowSpeed)
@@ -691,6 +712,98 @@ if CLIENT then
 			render.SetMaterial(Material("particle/particle_ring_wave_additive"))
 			local size = 20 + math.sin(CurTime() * 8) * 4 -- This helps us find where the Pikmin wind up better
 			render.DrawQuadEasy(hitPos + hitNormal * 0.5, hitNormal, size, size, col, 0) -- just like in the games, the end circle casts to surfaces on the wall too
+		end
+
+	end)
+
+	hook.Add("PostDrawTranslucentRenderables", "PikiWhistleEffect", function()
+		local ply = LocalPlayer() if not IsValid(ply) then return end
+		local wep = ply:GetActiveWeapon() if not IsValid(wep) or wep:GetClass() ~= "olimar_gun" then return end
+
+		-- Whistle rendering & particle logic
+		if wep:GetNWBool("Whistling") then
+			local whistleStart = wep:GetNWFloat("WhistleStart", 0)
+			local diffTime = CurTime() - whistleStart
+			if diffTime >= 0 and diffTime <= 1.25 then
+				local tr = util.TraceLine({
+					start = ply:GetShootPos(),
+					endpos = ply:GetShootPos() + ply:GetAimVector() * 750,
+					filter = function(ent)
+						if IsValid(ent) and (ent:GetClass() == "pikmin" or ent:GetClass() == "pikmin_sprout" or ent:GetClass() == "pikmin_model") then
+							return false
+						end
+						return ent ~= ply and ent ~= wep
+					end
+				})
+				if tr.Hit then
+					local whistleRange = (10 + diffTime * 150) * 1.75
+					
+					-- track whistle position velocity
+					if not wep.LastWhistlePos then
+						wep.LastWhistlePos = tr.HitPos
+						wep.WhistleVelocity = Vector(0,0,0)
+					end
+					
+					local dt = RealFrameTime()
+					if dt > 0 then
+						local rawVel = (tr.HitPos - wep.LastWhistlePos) / dt
+						wep.WhistleVelocity = LerpVector(math.min(1.0, 10 * dt), wep.WhistleVelocity, rawVel)
+					end
+					wep.LastWhistlePos = tr.HitPos
+
+					-- center circle
+					render.SetMaterial(Material("effects/select_ring"))
+					render.DrawQuadEasy(tr.HitPos + tr.HitNormal * 0.5, tr.HitNormal, 24, 24, Color(255, 100, 255), 0)
+
+					-- Render particles
+					render.SetMaterial(Material("sprites/light_glow02_add"))
+					
+					local numArms = 6
+					local numDotsPerTail = 16 -- 16 particles per trail is enough lol
+					local rotationSpeed = 6 
+					local maxAge = 0.35
+					
+					-- Calculate basis vectors/directions/whatever
+					local up = (math.abs(tr.HitNormal.z) < 0.99) and Vector(0,0,1) or Vector(1,0,0)
+					local right = tr.HitNormal:Cross(up):GetNormalized()
+					local forward = right:Cross(tr.HitNormal):GetNormalized()
+					for arm = 1, numArms do local armAngleBase = (arm / numArms) * 2 * math.pi
+						
+						for i = 1, numDotsPerTail do
+							local t_ratio = i / numDotsPerTail -- 0 (top of tail) to 1 (ground/edge of whistle)
+							local minTau = math.max(0, diffTime - maxAge)
+							local tau = minTau + t_ratio * (diffTime - minTau)
+							local rVal = whistleRange
+							
+							-- Lag offset based on movement velocity and age
+							local age = (diffTime - tau)
+							
+							-- this took forever to figure out
+							local dragForce = 225
+							local angleVal = armAngleBase - CurTime() * rotationSpeed + (math.pow(age, 1.5) * dragForce) / whistleRange
+							local offset = right * rVal * math.cos(angleVal) + forward * rVal * math.sin(angleVal)
+							
+							-- Height
+							local zVal = age * 160
+							
+							-- movement lag 
+							local lag = (wep.WhistleVelocity or Vector(0,0,0)) * age
+							if lag:LengthSqr() > 90000 then
+								lag = lag:GetNormalized() * 300
+							end
+							
+							local dotPos = tr.HitPos + offset + tr.HitNormal * 12 + Vector(0, 0, zVal) - lag
+							local hue = (1 - t_ratio) * 300
+							local col = HSVToColor(hue, 1, 1)
+							local size = 60 * (1 + 0.15 * math.sin(CurTime() * 12 + zVal * 0.05))
+							render.DrawSprite(dotPos, size, size, col)
+						end
+					end
+				end
+			end
+		else
+			wep.LastWhistlePos = nil
+			wep.WhistleVelocity = nil
 		end
 	end)
 end
