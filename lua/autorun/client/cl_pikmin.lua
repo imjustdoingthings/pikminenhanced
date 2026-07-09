@@ -1,7 +1,7 @@
 include("autorun/sh_pikmin.lua")
 
 HideOlimarHUD = false
-CreateConVar("pikmin_nohud","0",FCVAR_NONE,"hide the weapon HUD")
+CreateConVar("pikmin_nohud","0",{FCVAR_ARCHIVE},"hide the weapon HUD")
 cvars.AddChangeCallback("pikmin_nohud",function(name,ov,nv) HideOlimarHUD = nv == "1" and true or false end)
 
 local PikiMenu = nil

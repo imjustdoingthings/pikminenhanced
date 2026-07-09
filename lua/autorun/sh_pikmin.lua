@@ -261,14 +261,14 @@ else
 end
 
 --//CVars
-CreateConVar("pik_auto",tostring(PikiAuto),{FCVAR_REPLICATED},"use special Pikmin logic (might cause lag)")
-CreateConVar("pik_field",tostring(PikiMaxField),{FCVAR_REPLICATED},"Maximum Pikmin")
-CreateConVar("pik_drops",0,{FCVAR_REPLICATED},"Enable NPC Drops")
-CreateConVar("pik_idle","1",{FCVAR_REPLICATED},"Play Pikmin idle sounds")
-CreateConVar("pik_classicpluck","0",{FCVAR_REPLICATED},"Use classic Pikmin spawn sounds")
+CreateConVar("pik_auto",tostring(PikiAuto),{FCVAR_REPLICATED, FCVAR_ARCHIVE},"use special Pikmin logic (might cause lag)")
+CreateConVar("pik_field",tostring(PikiMaxField),{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Maximum Pikmin")
+CreateConVar("pik_drops",0,{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable NPC Drops")
+CreateConVar("pik_idle","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Play Pikmin idle sounds")
+CreateConVar("pik_classicpluck","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Use classic Pikmin spawn sounds")
 CreateConVar("pik_admin","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Restrict Pikmin entities to admins")
-CreateConVar("pik_disband","1",{FCVAR_REPLICATED},"enable Pikmin grouping on disband")
-CreateConVar("pik_white_poisongas","1",{FCVAR_REPLICATED},"Enable White Pikmin poison gas on death")
+CreateConVar("pik_disband","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"enable Pikmin grouping on disband")
+CreateConVar("pik_white_poisongas","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable White Pikmin poison gas on death")
 
 
 local PikminAdminRestrictedClasses = {
@@ -307,9 +307,9 @@ if SERVER then
 end
 
 for i=1,PikTypes do
-	CreateConVar("pik_damage"..i,tostring(PikDamage[i]),{FCVAR_REPLICATED},PikDefaultTypeNames[i].." Damage")
-	CreateConVar("pik_health"..i,tostring(PikHealth[i]),{FCVAR_REPLICATED},PikDefaultTypeNames[i].." Health")
-	CreateConVar("pik_speed"..i,tostring(PikSpeed[i]),{FCVAR_REPLICATED},PikDefaultTypeNames[i].." Base Speed")
+	CreateConVar("pik_damage"..i,tostring(PikDamage[i]),{FCVAR_REPLICATED, FCVAR_ARCHIVE},PikDefaultTypeNames[i].." Damage")
+	CreateConVar("pik_health"..i,tostring(PikHealth[i]),{FCVAR_REPLICATED, FCVAR_ARCHIVE},PikDefaultTypeNames[i].." Health")
+	CreateConVar("pik_speed"..i,tostring(PikSpeed[i]),{FCVAR_REPLICATED, FCVAR_ARCHIVE},PikDefaultTypeNames[i].." Base Speed")
 	if SERVER then
 		cvars.AddChangeCallback("pik_damage"..i, function(name,ov,nv)
 			nv = math.Clamp(math.floor(tonumber(nv) or 0),0,40)
