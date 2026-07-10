@@ -641,7 +641,7 @@ function ENT:Think()
 		if OnFire then self:Extinguish() end
 		if self.Poison then self.Poison = false end
 		if self.Thrown then self.Thrown = false end
-		if not (self.Color == 3 or self.Color == 6 or self.Color == 9) then
+		if not (self.Color == 3 or self.Color == 6 or self.Color == 9 or self.Color == 7) then
 			minDist = 30
 			if self.Carrying then self:Drop() end
 			self.Drowning = true
@@ -758,6 +758,22 @@ function ENT:Think()
 				finalSpeed = math.min(finalSpeed, 700)
 			end
 			
+			if self.Color == 7 then
+				local pointContents = util.PointContents(targetPos - Vector(0, 0, 20))
+				if bit.band(pointContents, CONTENTS_WATER) != 0 then
+					local waterTr = util.TraceLine({
+						start = targetPos + Vector(0, 0, 500),
+						endpos = targetPos - Vector(0, 0, 200),
+						mask = MASK_WATER
+					})
+					if waterTr.Hit then
+						targetPos.z = waterTr.HitPos.z + 50
+						dirVec = targetPos - pos
+						dist = dirVec:Length()
+					end
+				end
+			end
+
 			-- Distance-based deceleration/damping to prevent overshooting/jiggling
 			local easeDist = self.Color == 7 and 60 or 32
 			if dist < easeDist then
@@ -765,7 +781,7 @@ function ENT:Think()
 			end
 			
 			if speed <= math.max(50, finalSpeed / 4) then
-				if InWater then
+				if InWater and self.Color ~= 7 then
 					self.Phys:ApplyForceCenter(dirVec * (self.Color == 3 and 10 or self.Color == 6 and 30 or self.Color == 9 and 10 or (self.DrownCall and CTime < self.DrownCall and 5 or 0)))
 				else
 					local finalVec = Vector(dirVec.X,dirVec.Y,self.Color == 7 and dirVec.Z or 0):GetNormalized()
