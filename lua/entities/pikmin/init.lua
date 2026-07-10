@@ -746,9 +746,13 @@ function ENT:Think()
 			if self.Carrying then finalSpeed = self.CarryMass*self.CarryWeight*4 + self.MoveForce end
 			
 			-- Cap White Pikmin speed when far from their mesh position to prevent aimless running
-			local activeWep = self.Olimar:GetActiveWeapon()
-			local isSwarming = IsValid(activeWep) and activeWep:GetClass() == "olimar_gun" and activeWep.Swarm
-			local isPlayAsPikmin = self.Olimar:GetNWBool("ispikmin", false)
+			local isSwarming = false
+			local isPlayAsPikmin = false
+			if IsValid(self.Olimar) then
+				local activeWep = self.Olimar:GetActiveWeapon()
+				isSwarming = IsValid(activeWep) and activeWep:GetClass() == "olimar_gun" and activeWep.Swarm
+				isPlayAsPikmin = self.Olimar:GetNWBool("ispikmin", false)
+			end
 			local useMesh = GetConVar("piki_mesh"):GetBool() and IsValid(self.Olimar) and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec and not isSwarming and not isPlayAsPikmin
 			if useMesh and self.Color == 5 and dist > 50 then
 				finalSpeed = math.min(finalSpeed, 700)
