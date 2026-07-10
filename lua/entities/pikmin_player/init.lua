@@ -80,7 +80,7 @@ function ENT:Think()
 		local MoveUp = self.Color == 7 and (self.Olimar:KeyDown(IN_JUMP) and 1 or self.Olimar:KeyDown(IN_DUCK) and -1 or 0) or 0
 		self:SetPos(self.Pik:GetPos()+LookAngles:Forward()*50+LookAngles:Forward()*MoveZ*500+LookAngles:Right()*MoveX*500+Vector(0,0,MoveUp*500))
 		
-		if self.Olimar:KeyDown(IN_ATTACK) and (self.Pik.PikMdl.CurAnim == 1 or self.Pik.PikMdl.CurAnim == 2 or self.Pik.PikMdl.CurAnim == self.Pik.WingedIdle) then
+		if self.Olimar:KeyDown(IN_ATTACK) and (self.Pik.PikMdl.CurAnim == "running" or self.Pik.PikMdl.CurAnim == "idle" or self.Pik.PikMdl.CurAnim == self.Pik.WingedIdle) then
 			if self.SingTick and CurTime() >= self.SingTick or not self.SingTick then
 				if not self.SingID then
 					self.SingType = math.random(1,3)

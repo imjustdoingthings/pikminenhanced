@@ -44,7 +44,7 @@ function ENT:Call(ply, call, send, color)
 	if send > 0 then
 		local pikiCount = 0
 		for _, v in ipairs(ents.FindByClass("pikmin")) do
-			if not v.PikPly and v.Color == targetColor and v.Olimar == ply and (v.PikMdl.CurAnim == 1 or v.PikMdl.CurAnim == 2 or v.PikMdl.CurAnim == v.WingedIdle) then
+			if not v.PikPly and v.Color == targetColor and v.Olimar == ply and (v.PikMdl.CurAnim == "running" or v.PikMdl.CurAnim == "idle" or v.PikMdl.CurAnim == v.WingedIdle) then
 				pikiCount = pikiCount + 1
 				table.insert(self.PikiList, v.Level)
 				v:Remove()
@@ -72,7 +72,7 @@ function ENT:Use(activator, caller)
 	if activator:IsPlayer() then
 		local pikiCount = 0
 		for _, v in ipairs(ents.FindByClass("pikmin")) do
-			if not v.PikPly and v.Color == self.Color and v.Olimar == activator and (v.PikMdl.CurAnim == 1 or v.PikMdl.CurAnim == 2 or v.PikMdl.CurAnim == v.WingedIdle) then
+			if not v.PikPly and v.Color == self.Color and v.Olimar == activator and (v.PikMdl.CurAnim == "running" or v.PikMdl.CurAnim == "idle" or v.PikMdl.CurAnim == v.WingedIdle) then
 				pikiCount = pikiCount + 1
 			end
 		end

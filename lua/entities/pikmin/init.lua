@@ -69,7 +69,7 @@ function ENT:Initialize()
 	mdl:Spawn()
 	mdl:Activate()
 	self.PikMdl = mdl
-	self.WingedIdle = self.Color == 7 and self.PikMdl:LookupSequence("swimming") or 2
+	self.WingedIdle = self.Color == 7 and "swimming" or "idle"
 	self.PikHP = PikHealth[self.Color]
 	self.Damage = PikDamage[self.Color]/PikDamageDivider
 	self.Thrown = false
@@ -121,7 +121,7 @@ function ENT:Join(parent)
 		self.Olimar = parent
 		self:SetNWEntity("Olimar",parent)
 		if IsValid(self.PikMdl) then
-			self.PikMdl.CurAnim = 7
+			self.PikMdl.CurAnim = "join"
 			self.PikMdl:SetNWBool("Dismissed",false)
 		end
 		if not self.Drowning and not self.BurnTick and not self.Poison then
@@ -304,7 +304,7 @@ function ENT:Think()
 	if self.Dead then return end
 	if self.IsHeldForThrow then
 		if IsValid(self.PikMdl) then
-			self.PikMdl.CurAnim = 6
+			self.PikMdl.CurAnim = "drowning"
 		end
 		return
 	end
@@ -321,7 +321,10 @@ function ENT:Think()
 	local minDist = 200
 	local CTime = CurTime()
 	if IsValid(self.Olimar) then
-		local useMesh = GetConVar("piki_mesh"):GetBool() and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec
+		local activeWep = self.Olimar:GetActiveWeapon()
+		local isSwarming = IsValid(activeWep) and activeWep:GetClass() == "olimar_gun" and activeWep.Swarm
+		local isPlayAsPikmin = self.Olimar:GetNWBool("ispikmin", false)
+		local useMesh = GetConVar("piki_mesh"):GetBool() and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec and not isSwarming and not isPlayAsPikmin
 		if useMesh then
 			-- update squad mesh positions once per frame
 			if not self.Olimar.LastSquadUpdate or self.Olimar.LastSquadUpdate ~= CTime then
@@ -697,7 +700,7 @@ function ENT:Think()
 		end
 	end
 	
-	self.PikMdl.CurAnim = self.Called and 7 or self.Attacking and 4 or self.Drinking and 9 or self.Thrown and 3 or (OnFire or self.Poison) and 10 or self.Drowning and 6 or InWater and 5 or speed >= 6 and (self.Color == 7 and self.WingedIdle or 1) or (self.Dismissed and (self.Color == 7 and self.WingedIdle or 8) or self.WingedIdle)
+	self.PikMdl.CurAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
 	
 	if cvars.Bool("pik_idle") and CTime >= (self.IdleSoundNext or 0) then
 		local nextIdle = IsValid(self.Olimar) and self.Olimar.NextPikiIdle or PIKI_GLOBAL_NEXT_IDLE or 0
@@ -743,7 +746,10 @@ function ENT:Think()
 			if self.Carrying then finalSpeed = self.CarryMass*self.CarryWeight*4 + self.MoveForce end
 			
 			-- Cap White Pikmin speed when far from their mesh position to prevent aimless running
-			local useMesh = GetConVar("piki_mesh"):GetBool() and IsValid(self.Olimar) and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec
+			local activeWep = self.Olimar:GetActiveWeapon()
+			local isSwarming = IsValid(activeWep) and activeWep:GetClass() == "olimar_gun" and activeWep.Swarm
+			local isPlayAsPikmin = self.Olimar:GetNWBool("ispikmin", false)
+			local useMesh = GetConVar("piki_mesh"):GetBool() and IsValid(self.Olimar) and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec and not isSwarming and not isPlayAsPikmin
 			if useMesh and self.Color == 5 and dist > 50 then
 				finalSpeed = math.min(finalSpeed, 700)
 			end

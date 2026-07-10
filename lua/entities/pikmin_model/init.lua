@@ -2,7 +2,7 @@ AddCSLuaFile("cl_init.lua")
 AddCSLuaFile("shared.lua")
 include('shared.lua')
 
-ENT.CurAnim = 2
+ENT.CurAnim = "idle"
 
 function ENT:Initialize()
 	self:DrawShadow(false)

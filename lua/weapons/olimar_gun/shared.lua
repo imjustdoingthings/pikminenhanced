@@ -24,7 +24,7 @@ local function HoldPikmin(ply, piki)
 	piki:Fire("SetParentAttachment", "anim_attachment_RH")
 	piki:SetLocalPos(Vector(0, 0, -2))
 	piki:SetLocalAngles(Angle(0, 90, 0))
-	piki.PikMdl.CurAnim = 6
+	piki.PikMdl.CurAnim = "drowning"
 
 	local phys = piki:GetPhysicsObject()
 	if IsValid(phys) then
@@ -242,7 +242,7 @@ function SWEP:SecondaryAttack()
 		if tr.Entity.IsCarry and tr.Entity:GetNWInt("pikimax") ~= 0 and tr.Entity:GetNWInt("piki") >= tr.Entity:GetNWInt("pikimax") then return end
 		local charged = false
 		local chargetype = self.Owner:GetNWEntity("piki")
-		if IsValid(chargetype) and chargetype.PikMdl and (chargetype.PikMdl.CurAnim <= 2 or chargetype.PikMdl.CurAnim == chargetype.WingedIdle) then
+		if IsValid(chargetype) and chargetype.PikMdl and (chargetype.PikMdl.CurAnim == "running" or chargetype.PikMdl.CurAnim == "idle" or chargetype.PikMdl.CurAnim == chargetype.WingedIdle) then
 			self.Owner:SetNWEntity("piki",self.Owner)
 			timer.Simple(0,function() chargetype:StopSound(chargetype.Color == 7 and "pikmin/pikmin_pink_grab.wav" or chargetype.Color == 8 and "pikmin/pikmin_rock_grab.wav" or "pikmin/grab.wav") end)
 		else
@@ -399,7 +399,7 @@ local function PikSWepKeyPress(ply, key)
 				for _, v in ipairs(newColorPiki) do
 					if not v.Called then
 						v.Called = true
-						v.PikMdl.CurAnim = 7
+						v.PikMdl.CurAnim = "join"
 						timer.Simple(0.325, function() if IsValid(v) then v.Called = false end end)
 					end
 				end
