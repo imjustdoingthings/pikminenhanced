@@ -493,10 +493,8 @@ local function PikSWepKeyPress(ply, key)
 					end
 				end
 				
-				--Split by level if possible
+				--Split by level if all Pikmin are the same color
 				if typeCount == 1 then
-					sepDist = 70
-					forDist = 120
 					typeDict = {}
 					typeArray = {}
 					typeCount = 0
@@ -511,6 +509,7 @@ local function PikSWepKeyPress(ply, key)
 						table.insert(typeDict[v.Level],v)
 					end
 				end
+
 				if typeCount == 2 then
 					sepDist = 140
 					forDist = 180
@@ -546,19 +545,54 @@ local function PikSWepKeyPress(ply, key)
 				end
 				
 				if typeCount == 1 then
-					for _,v in ipairs(pikiArray) do
-						v:Disband()
-					end
+					for _,v in ipairs(pikiArray) do v:Disband() end
 				else
 					local posArray = {}
-					local basePos = pos + disbandDir*forDist
-					local slice = 2 * math.pi / typeCount
-					for i=0,typeCount-1 do
-						local angle = slice * i
-						table.insert(posArray,basePos+disbandRight*sepDist*math.cos(angle)+disbandDir*sepDist*math.sin(angle))
+					local arcSpan = math.rad(math.Clamp(typeCount * 22, 44, 180))
+
+					-- find the largest group's outermost ring so the dismissal (now) arc 
+					-- can be sized to prevent adjacent groups from overlapping
+
+					-- Results in this, combined with our other code https://files.catbox.moe/0elr4t.png
+
+					local ringSpacing = 36
+					local maxGroupRad = 0
+					for _, typ in ipairs(typeArray) do
+						local groupSize = #typeDict[typ]
+						local rem = groupSize - 1
+						local outerRing = 0
+						while rem > 0 do
+							outerRing = outerRing + 1
+							rem = rem - outerRing * 6
+						end
+						maxGroupRad = math.max(maxGroupRad, outerRing * ringSpacing)
+					end
+
+					-- find the center-center dist between adjacent groups
+					-- so their footprints don't overlap 
+					local minCenterDist = maxGroupRad * 2 + 48 -- add an offset/gap
+
+					-- centers are at least minCenterDist apart.
+					local arcRadius
+					if typeCount <= 1 then
+						arcRadius = 180
+					elseif typeCount == 2 then
+						arcRadius = (minCenterDist / 2) / math.sin(arcSpan / 2)
+					else
+						local adjacentAngle = arcSpan / (typeCount - 1)
+						arcRadius = (minCenterDist / 2) / math.sin(adjacentAngle / 2)
+					end
+					-- Never let it be smaller than this given minimum
+					arcRadius = math.max(arcRadius, 180 + typeCount * 12)
+
+					for i = 0, typeCount - 1 do
+						local t = typeCount > 1 and (i / (typeCount - 1)) or 0.5
+						local angle = -arcSpan / 2 + t * arcSpan
+						table.insert(posArray, pos + disbandRight * math.sin(angle) * arcRadius + disbandDir * math.cos(angle) * arcRadius)
 					end
 					for k,typ in ipairs(typeArray) do
 						local groupPikmin = typeDict[typ]
+						local leader = groupPikmin[1]
 						local idx = 1
 						for _,v in ipairs(groupPikmin) do
 							local offset = Vector(0,0,0)
@@ -578,11 +612,11 @@ local function PikSWepKeyPress(ply, key)
 										remaining = remaining - ringCapacity
 									end
 								end
-								local rVal = ring * 14
+								local rVal = ring * ringSpacing
 								local theta = (ringIndex / ringCount) * 2 * math.pi
 								offset = Vector(rVal * math.cos(theta), rVal * math.sin(theta), 0)
 							end
-							v:Disband(posArray[k] + offset)
+							v:Disband(posArray[k], leader, offset)
 							idx = idx + 1
 						end
 					end

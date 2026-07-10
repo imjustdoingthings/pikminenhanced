@@ -102,10 +102,8 @@ function ENT:DisbandCarry()
 	self:Disband()
 end
 
-function ENT:Disband(pos)
+function ENT:Disband(pos, leader, offset)
 	if self.Carrying then self:Drop() end
-	if pos then self.DismissTimer = CurTime() + 2 end
-	self.DismissPos = pos
 	self.Dismissed = true
 	self.Olimar = nil
 	self:SetNWEntity("Olimar",self)
@@ -113,6 +111,41 @@ function ENT:Disband(pos)
 	self.PikMdl:SetNWBool("Dismissed",true)
 	self.MeshIndex = nil
 	self.MeshSquadSize = nil
+
+	-- new disband logic 
+	-- Should look significantly better. 
+	-- Thank goodness for https://wiki.facepunch.com/gmod/Enums/MASK . lifesaver
+
+	if pos and IsValid(leader) then
+		self.DismissTimer = CurTime() + 10
+		self.DisbandLeader = leader
+		self.DisbandOffset = offset or Vector(0,0,0)
+		self.DisbandGathered = false
+		self.DisbandSpreadTimer = nil
+		
+		if leader == self then
+			self.IsDisbandLeader = true
+			local tr = util.TraceLine({
+				start = pos + Vector(0, 0, 150),
+				endpos = pos - Vector(0, 0, 150),
+				mask = MASK_SOLID_BRUSHONLY
+			})
+			if tr.Hit then
+				pos.z = tr.HitPos.z
+			end
+			self.DismissPos = pos
+		else
+			self.IsDisbandLeader = false
+			self.DismissPos = nil
+		end
+	else
+		self.DismissTimer = nil
+		self.DismissPos = nil
+		self.DisbandLeader = nil
+		self.IsDisbandLeader = false
+		self.DisbandGathered = true
+		self.DisbandSpreadTimer = nil
+	end
 end
 
 function ENT:Join(parent)
@@ -120,6 +153,10 @@ function ENT:Join(parent)
 		self.Dismissed = false
 		self.Olimar = parent
 		self:SetNWEntity("Olimar",parent)
+		self.DisbandLeader = nil
+		self.IsDisbandLeader = false
+		self.DisbandGathered = true
+		self.DisbandSpreadTimer = nil
 		if IsValid(self.PikMdl) then
 			self.PikMdl.CurAnim = "join"
 			self.PikMdl:SetNWBool("Dismissed",false)
@@ -320,25 +357,27 @@ function ENT:Think()
 	local targetPos = pos
 	local minDist = 200
 	local CTime = CurTime()
-	if IsValid(self.Olimar) then
-		local activeWep = self.Olimar:GetActiveWeapon()
+	local olimar = self.Olimar
+	if IsValid(olimar) then
+		local isOlimarPlayer = olimar:IsPlayer() -- Lots of fixes had to be made related to this throughout the addon
+		local activeWep = isOlimarPlayer and olimar:GetActiveWeapon()
 		local isSwarming = IsValid(activeWep) and activeWep:GetClass() == "olimar_gun" and activeWep.Swarm
-		local isPlayAsPikmin = self.Olimar:GetNWBool("ispikmin", false)
-		local useMesh = GetConVar("piki_mesh"):GetBool() and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec and not isSwarming and not isPlayAsPikmin
+		local isPlayAsPikmin = isOlimarPlayer and olimar:GetNWBool("ispikmin", false)
+		local useMesh = GetConVar("piki_mesh"):GetBool() and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not olimar.SwarmVec and not isSwarming and not isPlayAsPikmin
 		if useMesh then
 			-- update squad mesh positions once per frame
-			if not self.Olimar.LastSquadUpdate or self.Olimar.LastSquadUpdate ~= CTime then
-				self.Olimar.LastSquadUpdate = CTime
+			if not olimar.LastSquadUpdate or olimar.LastSquadUpdate ~= CTime then
+				olimar.LastSquadUpdate = CTime
 				
 				local squad = {}
 				for _, p in ipairs(ents.FindByClass("pikmin")) do
-					if IsValid(p) and p.Olimar == self.Olimar and not p.Dismissed and not p.Attacking and not p.Carrying and not p.Poison and not p.Dead then
+					if IsValid(p) and p.Olimar == olimar and not p.Dismissed and not p.Attacking and not p.Carrying and not p.Poison and not p.Dead then
 						table.insert(squad, p)
 					end
 				end
 				
-				local held = self.Olimar:GetNWEntity("piki")
-				local selectedColor = (IsValid(held) and held.Color) or self.Olimar:GetNWInt("SelectedPikiColor", 0)
+				local held = olimar:GetNWEntity("piki")
+				local selectedColor = (IsValid(held) and held.Color) or olimar:GetNWInt("SelectedPikiColor", 0)
 				
 				local defaultOrder = {
 					[1] = 1, -- Red
@@ -475,38 +514,38 @@ function ENT:Think()
 				end
 				-- I hope this is performant enough theoretically but it will do for now, will focus on optimization another time
 				
-				if not self.Olimar.PikiMeshAngle then
-					self.Olimar.PikiMeshAngle = self.Olimar:GetAngles().y
+				if not olimar.PikiMeshAngle then
+					olimar.PikiMeshAngle = olimar:GetAngles().y
 				end
 				
-				local targetYaw = self.Olimar:GetAngles().y
-				self.Olimar.PikiMeshAngle = math.ApproachAngle(self.Olimar.PikiMeshAngle, targetYaw, FrameTime() * 120)
+				local targetYaw = olimar:GetAngles().y
+				olimar.PikiMeshAngle = math.ApproachAngle(olimar.PikiMeshAngle, targetYaw, FrameTime() * 120)
 				
-				local smoothedAng = Angle(0, self.Olimar.PikiMeshAngle, 0)
+				local smoothedAng = Angle(0, olimar.PikiMeshAngle, 0)
 				local smoothedForward = smoothedAng:Forward()
 				local smoothedRight = smoothedAng:Right()
 				
 				local yMul = self.Color == 4 and 1.25 or 1.0 -- Purples spread a bit more
-				targetPos = self.Olimar:GetPos() + smoothedForward * localX + smoothedRight * (localY * yMul)
+				targetPos = olimar:GetPos() + smoothedForward * localX + smoothedRight * (localY * yMul)
 				minDist = 8
 			else
-				targetPos = self.Olimar:GetPos()
+				targetPos = olimar:GetPos()
 				minDist = 80
 			end
 		else
 			self.MeshIndex = nil
 			self.MeshSquadSize = nil
 			
-			targetPos = self.Olimar:GetPos()
-			if self.Olimar.SwarmVec then
-				targetPos = targetPos + self.Olimar.SwarmVec
+			targetPos = olimar:GetPos()
+			if olimar.SwarmVec then
+				targetPos = targetPos + olimar.SwarmVec
 				minDist = 50
 			else
-				local tpik = self.Olimar:GetNWEntity("piki")
-				if IsValid(tpik) and tpik ~= self.Olimar then
+				local tpik = olimar:GetNWEntity("piki")
+				if IsValid(tpik) and tpik ~= olimar then
 					if tpik.Color ~= self.Color or tpik.Level ~= self.Level then
 						minDist = 50
-						targetPos = targetPos - self.Olimar:GetAngles():Forward()*120
+						targetPos = targetPos - olimar:GetAngles():Forward()*120
 					else
 						minDist = 80
 					end
@@ -574,7 +613,10 @@ function ENT:Think()
 	
 	if self.Color == 7 then
 		local isSwarming = IsValid(self.Olimar) and self.Olimar.SwarmVec
-		if not isSwarming and not self.AttackTarget and not self.PikPly then
+		-- Only add the hover offset when NOT in a structured disband (the disband
+		-- target already has the +75 baked in via terrain projection).
+		local inStructuredDisband = self.Dismissed and IsValid(self.DisbandLeader)
+		if not isSwarming and not self.AttackTarget and not self.PikPly and not inStructuredDisband then
 			targetPos = targetPos + Vector(0,0,75)
 		end
 		local shouldFloat = not self.Thrown and not self.Dead
@@ -584,7 +626,8 @@ function ENT:Think()
 			end
 			if shouldFloat then
 				local vel = self.Phys:GetVelocity()
-				local friction = (not self.Dismissed and not self.Carrying and not self.Attacking) and 0.5 or 0.15
+				-- Use the same friction during disband so Winged Pikmin decelerate properly
+				local friction = (not self.Carrying and not self.Attacking) and 0.5 or 0.15
 				self.Phys:ApplyForceCenter(-vel * friction)
 			end
 		end
@@ -721,17 +764,86 @@ function ENT:Think()
 		end
 	end
 	if not self.Called and not self.Drinking and not self.Attacking then
+		if self.Dismissed then
+			minDist = 30
+			if IsValid(self.DisbandLeader) then
+				if self.IsDisbandLeader then
+					if self.DismissPos then
+						targetPos = self.DismissPos
+						minDist = 32
+						if pos:Distance(self.DismissPos) <= 32 or (self.DismissTimer and CTime >= self.DismissTimer) then
+							self.DismissPos = nil
+							self.DismissTimer = nil
+						end
+					else
+						targetPos = pos
+					end
+				else
+					if not self.DisbandGathered then
+						local leaderPos = self.DisbandLeader:GetPos()
+						if self.DisbandLeader.Color == 7 then
+							leaderPos = leaderPos - Vector(0, 0, 75)
+						end
+						targetPos = leaderPos
+						if self.Color == 7 then
+							targetPos = targetPos + Vector(0, 0, 75)
+						end
+						
+						local leaderArrived = not self.DisbandLeader.DismissPos or self.DisbandLeader:GetPos():Distance(self.DisbandLeader.DismissPos) <= 50
+						if (leaderArrived and pos:Distance(leaderPos) <= 80) or (self.DismissTimer and CTime >= self.DismissTimer) then
+							self.DisbandGathered = true
+							self.DisbandSpreadTimer = CTime + 1.5
+						end
+					else
+						if CTime < (self.DisbandSpreadTimer or 0) then
+							local leaderPos = self.DisbandLeader:GetPos()
+							if self.DisbandLeader.Color == 7 then
+								leaderPos = leaderPos - Vector(0, 0, 75)
+							end
+							local targetGround = leaderPos + self.DisbandOffset
+							
+							-- project oonto terrain slopes
+							local tr = util.TraceLine({
+								start = targetGround + Vector(0, 0, 150),
+								endpos = targetGround - Vector(0, 0, 150),
+								mask = MASK_SOLID_BRUSHONLY
+							})
+							if tr.Hit then
+								targetGround.z = tr.HitPos.z
+							end
+							
+							targetPos = targetGround
+							if self.Color == 7 then
+								targetPos = targetPos + Vector(0, 0, 75)
+							end
+						else
+							targetPos = pos
+							self.DisbandLeader = nil
+						end
+					end
+				end
+			else
+				if self.DismissPos then
+					targetPos = self.DismissPos
+					minDist = 32
+					if pos:Distance(self.DismissPos) <= 32 or (self.DismissTimer and CTime >= self.DismissTimer) then
+						self.DismissPos = nil
+						self.DismissTimer = nil
+					end
+				else
+					targetPos = pos
+				end
+			end
+		end
+
 		local targetDist = pos:Distance(targetPos)
 		
 		if targetDist >= 1400 and not self.Attacking and not self.AttackTarget and not self.Dismissed and not self.Drowning and not (OnFire or self.Poison) and (not self.Carrying or minDist ~= 0) then if self.Carrying then self:DisbandCarry() else self:Disband() end end
 		
-		--if self.IsCarry and self.AttackTarget then
-		--	if not InWater and math.abs((targetPos-pos).Z) >= 200 then self:Drop() end
-		--end
+		-- I removed whatever comment was here it didn't seem important
 		
-		if self.DismissPos and self.Dismissed and (targetDist <= minDist or CTime >= self.DismissTimer) then self.DismissPos = nil end
-		
-		if not self.Thrown and (not self.Dismissed or self.DismissPos or OnFire or self.Carrying or self.Poison) and targetDist >= minDist and CTime >= self.NextHop then
+		local isMovingDisband = self.DismissPos or (IsValid(self.DisbandLeader) and (not self.DisbandGathered or CTime < (self.DisbandSpreadTimer or 0)))
+		if not self.Thrown and (not self.Dismissed or isMovingDisband or OnFire or self.Carrying or self.Poison) and targetDist >= minDist and CTime >= self.NextHop then
 			self.NextHop = CTime + 0.1
 			
 			if self.Carrying and self.CarryObject:GetVelocity():Length() >= 5 and not self.CarryObject.CarrySound:IsPlaying() then
@@ -742,18 +854,26 @@ function ENT:Think()
 			local dist = dirVec:Length()
 			
 			local finalSpeed = self.MoveForce
-			if self.Dismissed and not self.DismissPos and not OnFire and not self.Carrying then finalSpeed = 400 end
+			if self.Dismissed then
+				if not self.IsDisbandLeader and (not self.DisbandGathered or (self.DisbandSpreadTimer and CTime < self.DisbandSpreadTimer)) then
+					finalSpeed = self.BaseMoveForce * 0.6
+				elseif not self.DismissPos and not OnFire and not self.Carrying then
+					finalSpeed = 400
+				end
+			end
 			if self.Carrying then finalSpeed = self.CarryMass*self.CarryWeight*4 + self.MoveForce end
 			
 			-- Cap White Pikmin speed when far from their mesh position to prevent aimless running
 			local isSwarming = false
 			local isPlayAsPikmin = false
-			if IsValid(self.Olimar) then
-				local activeWep = self.Olimar:GetActiveWeapon()
+			local olimar = self.Olimar
+			if IsValid(olimar) then
+				local isOlimarPlayer = olimar:IsPlayer()
+				local activeWep = isOlimarPlayer and olimar:GetActiveWeapon()
 				isSwarming = IsValid(activeWep) and activeWep:GetClass() == "olimar_gun" and activeWep.Swarm
-				isPlayAsPikmin = self.Olimar:GetNWBool("ispikmin", false)
+				isPlayAsPikmin = isOlimarPlayer and olimar:GetNWBool("ispikmin", false) -- small fixes 
 			end
-			local useMesh = GetConVar("piki_mesh"):GetBool() and IsValid(self.Olimar) and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec and not isSwarming and not isPlayAsPikmin
+			local useMesh = GetConVar("piki_mesh"):GetBool() and IsValid(olimar) and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not (olimar and olimar.SwarmVec) and not isSwarming and not isPlayAsPikmin
 			if useMesh and self.Color == 5 and dist > 50 then
 				finalSpeed = math.min(finalSpeed, 700)
 			end
