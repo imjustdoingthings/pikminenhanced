@@ -520,3 +520,122 @@ hook.Add("player_spawn","PikiGlowPre",function(data)
 	local ply = Player(data.userid)
 	ply.PikiColor = GetPlayerColor(ply)
 end)
+
+--// Pikmin camera
+CreateConVar("pikmin_camera", "0", {FCVAR_ARCHIVE, FCVAR_USERINFO}, "Enable third-person Pikmin camera")
+CreateConVar("pikmin_camera_zoom", "2", {FCVAR_ARCHIVE, FCVAR_USERINFO}, "Pikmin camera zoom level (1=closest, 2=closer, 3=furthest)")
+CreateConVar("pikmin_camera_birds", "1", {FCVAR_ARCHIVE, FCVAR_USERINFO}, "Pikmin camera birds-eye level (1=standard, 2=mid, 3=full)")
+
+local cameraZoomDistances = {
+	[1] = 380, -- closest
+	[2] = 450, -- closer
+	[3] = 650  -- furthest
+}
+
+local cameraPitchAngles = {
+	[1] = 25, -- standard
+	[2] = 55, -- sort of birds-eye
+	[3] = 82  -- full birds-eye
+}
+
+-- Play the sound on convar changes
+local function PlayCameraAdjustSound()
+	surface.PlaySound("pikmin/camera.wav") -- ugh it's peak
+end
+cvars.AddChangeCallback("pikmin_camera", PlayCameraAdjustSound, "PikCamToggleSound")
+cvars.AddChangeCallback("pikmin_camera_zoom", PlayCameraAdjustSound, "PikCamZoomSound")
+cvars.AddChangeCallback("pikmin_camera_birds", PlayCameraAdjustSound, "PikCamBirdsSound")
+
+-- Cycle commands
+concommand.Add("pikmin_camera_toggle", function()
+	local cv = GetConVar("pikmin_camera")
+	local nextVal = cv:GetBool() and "0" or "1"
+	cv:SetString(nextVal)
+end)
+
+concommand.Add("pikmin_camera_zoom_cycle", function()
+	local cv = GetConVar("pikmin_camera_zoom")
+	local curVal = cv:GetInt()
+	local nextVal = curVal >= 3 and 1 or (curVal + 1)
+	cv:SetInt(nextVal)
+end)
+
+concommand.Add("pikmin_camera_birds_cycle", function()
+	local cv = GetConVar("pikmin_camera_birds")
+	local curVal = cv:GetInt()
+	local nextVal = curVal >= 3 and 1 or (curVal + 1)
+	cv:SetInt(nextVal)
+end)
+
+hook.Add("InitPostEntity", "PikminCameraWelcome", function()
+	timer.Simple(5, function()
+		if IsValid(LocalPlayer()) then
+			LocalPlayer():ChatPrint("[Pikmin Camera] Binds available: bind KEY pikmin_camera_toggle, pikmin_camera_zoom_cycle, pikmin_camera_birds_cycle")
+		end
+	end)
+end)
+
+hook.Add("CalcView", "PikminThirdPersonCamera", function(ply, pos, angles, fov)
+	if not GetConVar("pikmin_camera"):GetBool() then
+		-- reset the smoothing if camera is disabled
+		ply.PikCamSmoothDistance = nil
+		ply.PikCamSmoothPitch = nil
+		return
+	end
+	if not ply:Alive() or ply:GetNWBool("ispikmin") then return end
+	
+	local zoomLvl = math.Clamp(GetConVar("pikmin_camera_zoom"):GetInt(), 1, 3)
+	local birdsLvl = math.Clamp(GetConVar("pikmin_camera_birds"):GetInt(), 1, 3)
+	
+	local targetDistance = cameraZoomDistances[zoomLvl]
+	local targetPitch = cameraPitchAngles[birdsLvl]
+	
+	-- Initialize smoothed variables if they don't exist
+	if not ply.PikCamSmoothDistance then
+		ply.PikCamSmoothDistance = targetDistance
+	end
+	if not ply.PikCamSmoothPitch then
+		ply.PikCamSmoothPitch = targetPitch
+	end
+	
+	-- interpolate towards the targets over time
+	local dT = FrameTime()
+	ply.PikCamSmoothDistance = Lerp(math.min(1.0, 8 * dT), ply.PikCamSmoothDistance, targetDistance)
+	ply.PikCamSmoothPitch = Lerp(math.min(1.0, 8 * dT), ply.PikCamSmoothPitch, targetPitch)
+	
+	-- Angles for the camera: lock pitch based on smoothed pitch, yaw matches player look yaw
+	local camAngles = Angle(ply.PikCamSmoothPitch, angles.y, 0)
+	-- I'll come back to this later, since Olimar technically can't look up or down in the Pikmin games.
+
+	-- calculate camera head position offset (centered slightly above the player)
+	local targetHeadPos = ply:GetPos() + Vector(0, 0, 48)
+	local pushBack = camAngles:Forward() * -ply.PikCamSmoothDistance
+	
+	-- anti clip
+	local tr = util.TraceHull({
+		start = targetHeadPos,
+		endpos = targetHeadPos + pushBack,
+		filter = ply,
+		mins = Vector(-8, -8, -8),
+		maxs = Vector(8, 8, 8),
+		mask = MASK_SOLID_BRUSHONLY
+	})
+	
+	local view = {
+		origin = tr.HitPos + tr.HitNormal * 4,
+		angles = camAngles,
+		fov = fov,
+		drawviewer = true
+	}
+	return view
+end)
+
+hook.Add("UpdateAnimation", "PikminAlwaysLookStraight", function(ply, velocity, maxseqgroundspeed)
+	if not IsValid(ply) or ply:GetNWBool("ispikmin") then return end
+	
+	local wep = ply:GetActiveWeapon()
+	if IsValid(wep) and wep:GetClass() == "olimar_gun" and GetConVar("pikmin_camera"):GetBool() then
+		ply:SetPoseParameter("aim_pitch", 0)
+		ply:SetPoseParameter("head_pitch", 0)
+	end
+end)

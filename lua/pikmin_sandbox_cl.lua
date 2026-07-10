@@ -8,8 +8,9 @@
 end--]]
 
 hook.Add("AddToolMenuCategories","PikiToolMenuCat",function()
-	spawnmenu.AddToolCategory("Utilities","Pikmin","#pikmin")
+	spawnmenu.AddToolCategory("Utilities","Pikmin","Pikmin (Enhanced!)")
 end)
+-- how could I forget to change that lmao
 
 hook.Add("PopulateToolMenu","PikiToolMenu",function()
 	spawnmenu.AddToolMenuOption("Utilities","Pikmin","PikiSettings","#pikimenu.settings","","",function(panel)
@@ -31,6 +32,24 @@ hook.Add("PopulateToolMenu","PikiToolMenu",function()
 		local poisongasbox = panel:CheckBox("#pikimenu.whitegas","pik_white_poisongas")
 		panel:ControlHelp("#pikimenu.whitegas2")
 		
+		local meshbox = panel:CheckBox("Enable Pikmin Meshing", "piki_mesh")
+		panel:ControlHelp("Makes Pikmin group behind you in a fixed array at a fixed distance. This copies how Pikmin move in the squad in Pikmin 1-4.")
+		
+		local meshSpacing = panel:NumSlider("Mesh Spacing", "piki_mesh_spacing", 0.1, 5.0, 2)
+		panel:ControlHelp("Adjusts spacing between Pikmin in the squad mesh.")
+		
+		local meshShape = panel:ComboBox("Mesh Shape", "piki_mesh_shape")
+		meshShape:AddChoice("Wedge (Default)", "wedge")
+		meshShape:AddChoice("Circle", "circle")
+		meshShape:AddChoice("Square", "square")
+		meshShape:AddChoice("Diamond", "diamond")
+		meshShape:AddChoice("Triangle", "triangle")
+		meshShape:AddChoice("Hexagon", "hexagon")
+		panel:ControlHelp("Adjusts the squad layout shape. The one most accurate to Pikmin itself is the Wedge.")
+		
+		local cambox = panel:CheckBox("Enable Thirdperson Camera", "pikmin_camera")
+		panel:ControlHelp("Enables the thirdperson Pikmin camera view. This mimics how we see Olimar in the Pikmin games.")
+		
 		local pikiSettingsBtn = panel:Button("Pikmin Settings", "")
 		function pikiSettingsBtn:DoClick()
 			local frame = vgui.Create("DFrame")
@@ -38,7 +57,8 @@ hook.Add("PopulateToolMenu","PikiToolMenu",function()
 			frame:SetSize(400, 600)
 			frame:Center()
 			frame:MakePopup()
-			
+			-- new Pikmin settings menu hooray
+
 			local scroll = vgui.Create("DScrollPanel", frame)
 			scroll:Dock(FILL)
 			

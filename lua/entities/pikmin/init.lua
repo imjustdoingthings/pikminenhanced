@@ -111,6 +111,8 @@ function ENT:Disband(pos)
 	self:SetNWEntity("Olimar",self)
 	self.AttackTarget = nil
 	self.PikMdl:SetNWBool("Dismissed",true)
+	self.MeshIndex = nil
+	self.MeshSquadSize = nil
 end
 
 function ENT:Join(parent)
@@ -300,6 +302,12 @@ end
 
 function ENT:Think()
 	if self.Dead then return end
+	if self.IsHeldForThrow then
+		if IsValid(self.PikMdl) then
+			self.PikMdl.CurAnim = 6
+		end
+		return
+	end
 	if self.LastNWThrown ~= self.Thrown then
 		self.LastNWThrown = self.Thrown
 		self:SetNWBool("Thrown", self.Thrown)
@@ -313,18 +321,192 @@ function ENT:Think()
 	local minDist = 200
 	local CTime = CurTime()
 	if IsValid(self.Olimar) then
-		targetPos = self.Olimar:GetPos()
-		if self.Olimar.SwarmVec then
-			targetPos = targetPos + self.Olimar.SwarmVec
-			minDist = 50
+		local useMesh = GetConVar("piki_mesh"):GetBool() and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec
+		if useMesh then
+			-- update squad mesh positions once per frame
+			if not self.Olimar.LastSquadUpdate or self.Olimar.LastSquadUpdate ~= CTime then
+				self.Olimar.LastSquadUpdate = CTime
+				
+				local squad = {}
+				for _, p in ipairs(ents.FindByClass("pikmin")) do
+					if IsValid(p) and p.Olimar == self.Olimar and not p.Dismissed and not p.Attacking and not p.Carrying and not p.Poison and not p.Dead then
+						table.insert(squad, p)
+					end
+				end
+				
+				local held = self.Olimar:GetNWEntity("piki")
+				local selectedColor = (IsValid(held) and held.Color) or self.Olimar:GetNWInt("SelectedPikiColor", 0)
+				
+				local defaultOrder = {
+					[1] = 1, -- Red
+					[2] = 2, -- Yellow
+					[3] = 3, -- Blue
+					[4] = 4, -- Purple
+					[5] = 5, -- White
+					[7] = 6, -- Winged
+					[8] = 7, -- Rock
+					[6] = 8, -- Bulbmin
+					[9] = 9  -- Mushroom
+				}
+				-- note: come back to this later for Glow and Ice Pikmin
+				-- note 2: let's hope that time actually comes if the stupid animations ever port correctly
+
+				table.sort(squad, function(a, b)
+					local pA = (a.Color == selectedColor) and 0 or (defaultOrder[a.Color] or 99)
+					local pB = (b.Color == selectedColor) and 0 or (defaultOrder[b.Color] or 99)
+					
+					if pA ~= pB then
+						return pA < pB
+					end
+					
+					if a.Level ~= b.Level then
+						return a.Level < b.Level
+					end
+					return a:EntIndex() < b:EntIndex()
+				end)
+				
+				for k, p in ipairs(squad) do
+					p.MeshIndex = k
+					p.MeshSquadSize = #squad
+				end
+			end
+			-- ok crazy math time 
+
+			if self.MeshIndex then
+				local k = self.MeshIndex
+				local squadSize = self.MeshSquadSize or 1
+				local squadScale = 0.9 + math.min(100, squadSize) / 200
+				local spacingScale = GetConVar("piki_mesh_spacing"):GetFloat()
+				local shape = GetConVar("piki_mesh_shape"):GetString()
+				
+				local localX, localY = 0, 0
+				
+				if shape == "circle" then
+					local ring = 0
+					local ringIndex = 1
+					local ringCount = 1
+					local remaining = k
+					while remaining > 0 do
+						local ringCapacity = (ring == 0) and 1 or (ring * 6)
+						if remaining <= ringCapacity then
+							ringIndex = remaining
+							ringCount = ringCapacity
+							remaining = 0
+						else
+							remaining = remaining - ringCapacity
+							ring = ring + 1
+						end
+					end
+					local rVal = (ring == 0) and 0 or (28 + ring * 22) * squadScale * spacingScale
+					local theta = (ringCount == 1) and 0 or (ringIndex / ringCount) * 2 * math.pi
+					localX = -70 * squadScale * spacingScale + rVal * math.cos(theta)
+					localY = rVal * math.sin(theta)
+				elseif shape == "square" then
+					local width = math.ceil(math.sqrt(squadSize))
+					local r = math.floor((k - 1) / width) + 1
+					local c = ((k - 1) % width) + 1
+					local col_centered = c - (width + 1) / 2
+					localX = -45 * squadScale * spacingScale - (r - 1) * 18 * squadScale * spacingScale
+					localY = col_centered * 18 * squadScale * spacingScale
+				elseif shape == "diamond" then
+					local width = math.ceil(math.sqrt(squadSize))
+					local r = math.floor((k - 1) / width) + 1
+					local c = ((k - 1) % width) + 1
+					local row_centered = r - (width + 1) / 2
+					local col_centered = c - (width + 1) / 2
+					local gridX = row_centered * 18 * squadScale * spacingScale
+					local gridY = col_centered * 18 * squadScale * spacingScale
+					local rotX = (gridX - gridY) * 0.7071
+					local rotY = (gridX + gridY) * 0.7071
+					localX = -70 * squadScale * spacingScale + rotX
+					localY = rotY
+				elseif shape == "triangle" then
+					local r = 1
+					local col = 1
+					local remaining = k
+					while remaining > 0 do
+						local rowCapacity = 1 + r * 2
+						if remaining <= rowCapacity then
+							col = remaining
+							remaining = 0
+						else
+							remaining = remaining - rowCapacity
+							r = r + 1
+						end
+					end
+					local rowCapacityReal = 1 + r * 2
+					local col_centered = col - (rowCapacityReal + 1) / 2
+					localX = -35 * squadScale * spacingScale - (r - 1) * 18 * squadScale * spacingScale
+					localY = col_centered * 18 * squadScale * spacingScale
+				elseif shape == "hexagon" then
+					local width = math.ceil(math.sqrt(squadSize))
+					local r = math.floor((k - 1) / width) + 1
+					local c = ((k - 1) % width) + 1
+					local col_centered = c - (width + 1) / 2
+					local colSpacing = 18 * squadScale * spacingScale
+					local rowSpacing = 15.588 * squadScale * spacingScale
+					local shift = (r % 2 == 0) and 0.5 or 0
+					localX = -45 * squadScale * spacingScale - (r - 1) * rowSpacing
+					localY = (col_centered + shift) * colSpacing
+				else -- default: wedge
+					local r = 1
+					local col = 1
+					local remaining = k
+					while remaining > 0 do
+						local rowCapacity = 1 + r * 2
+						if remaining <= rowCapacity then
+							col = remaining
+							remaining = 0
+						else
+							remaining = remaining - rowCapacity
+							r = r + 1
+						end
+					end
+					local rowCapacityReal = 1 + r * 2
+					local col_centered = col - (rowCapacityReal + 1) / 2
+					local rVal = (35 + r * 18) * squadScale * spacingScale
+					local thetaDiv = 0.7 + 0.14 * r
+					local theta = math.pi + (col_centered * (0.32 * squadScale * spacingScale) / thetaDiv)
+					localX = rVal * math.cos(theta)
+					localY = rVal * math.sin(theta)
+				end
+				-- I hope this is performant enough theoretically but it will do for now, will focus on optimization another time
+				
+				if not self.Olimar.PikiMeshAngle then
+					self.Olimar.PikiMeshAngle = self.Olimar:GetAngles().y
+				end
+				
+				local targetYaw = self.Olimar:GetAngles().y
+				self.Olimar.PikiMeshAngle = math.ApproachAngle(self.Olimar.PikiMeshAngle, targetYaw, FrameTime() * 120)
+				
+				local smoothedAng = Angle(0, self.Olimar.PikiMeshAngle, 0)
+				local smoothedForward = smoothedAng:Forward()
+				local smoothedRight = smoothedAng:Right()
+				
+				local yMul = self.Color == 4 and 1.25 or 1.0 -- Purples spread a bit more
+				targetPos = self.Olimar:GetPos() + smoothedForward * localX + smoothedRight * (localY * yMul)
+				minDist = 8
+			else
+				targetPos = self.Olimar:GetPos()
+				minDist = 80
+			end
 		else
-			local tpik = self.Olimar:GetNWEntity("piki")
-			if IsValid(tpik) and tpik ~= self.Olimar then
-				if tpik.Color ~= self.Color or tpik.Level ~= self.Level then
-					minDist = 50
-					targetPos = targetPos - self.Olimar:GetAngles():Forward()*120
-				else
-					minDist = 80
+			self.MeshIndex = nil
+			self.MeshSquadSize = nil
+			
+			targetPos = self.Olimar:GetPos()
+			if self.Olimar.SwarmVec then
+				targetPos = targetPos + self.Olimar.SwarmVec
+				minDist = 50
+			else
+				local tpik = self.Olimar:GetNWEntity("piki")
+				if IsValid(tpik) and tpik ~= self.Olimar then
+					if tpik.Color ~= self.Color or tpik.Level ~= self.Level then
+						minDist = 50
+						targetPos = targetPos - self.Olimar:GetAngles():Forward()*120
+					else
+						minDist = 80
+					end
 				end
 			end
 		end
@@ -553,15 +735,30 @@ function ENT:Think()
 				self.CarryObject.CarrySound:Play()
 			end
 			
-			if speed <= self.MoveForce/4 then
-				local dirVec = targetPos - pos
+			local dirVec = targetPos - pos
+			local dist = dirVec:Length()
+			
+			local finalSpeed = self.MoveForce
+			if self.Dismissed and not self.DismissPos and not OnFire and not self.Carrying then finalSpeed = 400 end
+			if self.Carrying then finalSpeed = self.CarryMass*self.CarryWeight*4 + self.MoveForce end
+			
+			-- Cap White Pikmin speed when far from their mesh position to prevent aimless running
+			local useMesh = GetConVar("piki_mesh"):GetBool() and IsValid(self.Olimar) and not self.Dismissed and not self.Attacking and not self.Carrying and not self.Poison and not self.Olimar.SwarmVec
+			if useMesh and self.Color == 5 and dist > 50 then
+				finalSpeed = math.min(finalSpeed, 700)
+			end
+			
+			-- Distance-based deceleration/damping to prevent overshooting/jiggling
+			local easeDist = self.Color == 7 and 60 or 32
+			if dist < easeDist then
+				finalSpeed = finalSpeed * (dist / easeDist)
+			end
+			
+			if speed <= math.max(50, finalSpeed / 4) then
 				if InWater then
 					self.Phys:ApplyForceCenter(dirVec * (self.Color == 3 and 10 or self.Color == 6 and 30 or self.Color == 9 and 10 or (self.DrownCall and CTime < self.DrownCall and 5 or 0)))
 				else
 					local finalVec = Vector(dirVec.X,dirVec.Y,self.Color == 7 and dirVec.Z or 0):GetNormalized()
-					local finalSpeed = self.MoveForce
-					if self.Dismissed and not OnFire and not self.Carrying then finalSpeed = 400 end
-					if self.Carrying then finalSpeed = self.CarryMass*self.CarryWeight*4 + self.MoveForce end
 					self.Phys:ApplyForceCenter(finalVec * finalSpeed + self.ZForceVector)
 				end
 			end

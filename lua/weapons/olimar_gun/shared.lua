@@ -14,6 +14,119 @@ if (CLIENT) then
 	SWEP.WepSelectIcon = surface.GetTextureID("weapons/pikmincommand")
 end
 
+local function HoldPikmin(ply, piki)
+	if not SERVER then return end
+	if not IsValid(piki) then return end
+	piki.IsHeldForThrow = true
+	piki:SetSolid(SOLID_NONE)
+	piki:SetMoveType(MOVETYPE_NONE)
+	piki:SetParent(ply)
+	piki:Fire("SetParentAttachment", "anim_attachment_RH")
+	piki:SetLocalPos(Vector(0, 0, -2))
+	piki:SetLocalAngles(Angle(0, 90, 0))
+	piki.PikMdl.CurAnim = 6
+
+	local phys = piki:GetPhysicsObject()
+	if IsValid(phys) then
+		phys:EnableCollisions(false)
+		phys:EnableGravity(false)
+		phys:Sleep()
+	end
+end
+
+local function ReleasePikmin(ply, piki, isCanceled)
+	if not SERVER then return end
+	if not IsValid(piki) then return end
+	piki.IsHeldForThrow = nil
+	
+	local handPos = ply:GetPos() + Vector(0, 0, 40)
+	if IsValid(ply) then
+		local attach_id = ply:LookupAttachment("anim_attachment_RH")
+		if attach_id and attach_id > 0 then
+			local attach = ply:GetAttachment(attach_id)
+			if attach then
+				handPos = attach.Pos
+			end
+		end
+	end
+	
+	piki:SetParent(nil)
+	piki:SetPos(handPos)
+	piki:SetSolid(SOLID_VPHYSICS)
+	piki:SetMoveType(MOVETYPE_VPHYSICS)
+	
+	local phys = piki:GetPhysicsObject()
+	if IsValid(phys) then
+		phys:EnableCollisions(true)
+		phys:EnableGravity(piki.Color ~= 7)
+		phys:SetPos(handPos)
+		phys:Wake()
+	end
+end
+
+local function GetAimTarget(ply)
+	local isThirdperson = false
+	if CLIENT then
+		isThirdperson = GetConVar("pikmin_camera"):GetBool()
+	else
+		isThirdperson = ply:GetInfoNum("pikmin_camera", 0) == 1
+	end
+
+	if isThirdperson then
+		local pikiColor = 1
+		local heldpiki = ply:GetNWEntity("piki")
+		if IsValid(heldpiki) and heldpiki ~= ply then
+			pikiColor = heldpiki.Color or 1
+		else
+			pikiColor = ply:GetNWInt("SelectedPikiColor", 1)
+		end
+
+		local maxDist = 450
+		if pikiColor == 2 then -- Yellow
+			maxDist = 550
+		elseif pikiColor == 4 then -- Purple
+			maxDist = 280
+		end
+
+		local pitch = ply:EyeAngles().p
+		local targetDist = math.Clamp(220 - pitch * 3.5, 50, maxDist)
+
+		local aimDir = ply:GetAimVector()
+		aimDir.z = 0
+		aimDir:Normalize()
+
+		local targetPos = ply:GetPos() + aimDir * targetDist
+
+		local tr = util.TraceLine({
+			start = targetPos + Vector(0, 0, 150),
+			endpos = targetPos - Vector(0, 0, 500),
+			filter = function(ent)
+				if IsValid(ent) and (ent:GetClass() == "pikmin" or ent:GetClass() == "pikmin_sprout" or ent:GetClass() == "pikmin_model") then
+					return false
+				end
+				return ent ~= ply
+			end
+		})
+
+		if not tr.Hit then
+			tr.HitPos = targetPos
+		end
+		return tr
+	else
+		local tr = util.TraceLine({
+			start = ply:GetShootPos(),
+			endpos = ply:GetShootPos() + ply:GetAimVector() * 750,
+			filter = function(ent)
+				if IsValid(ent) and (ent:GetClass() == "pikmin" or ent:GetClass() == "pikmin_sprout" or ent:GetClass() == "pikmin_model") then
+					return false
+				end
+				return ent ~= ply
+			end
+		})
+		return tr
+	end
+end
+
 SWEP.SelRadius = 0
 SWEP.LastSkin = 0
 
@@ -76,13 +189,28 @@ function SWEP:Holster()
 		self.WhistleSound:Stop()
 		self.SwarmSound:Stop()
 		self:SendWeaponAnim(ACT_VM_HOLSTER)
+		
+		local held = self.Owner:GetNWEntity("piki")
+		if IsValid(held) and held ~= self.Owner then
+			self.Owner:SetNWEntity("piki", self.Owner)
+			ReleasePikmin(self.Owner, held, true)
+		end
 	end
 	return true
 end
 
 function SWEP:OnRemove()
 	if self.Swarm and IsValid(self.Owner) then self.Owner:SetSlowWalkSpeed(self.Owner.SlowSpeed) end
-	if IsValid(self.Owner) then self.Owner.SwarmVec = nil end
+	if IsValid(self.Owner) then
+		self.Owner.SwarmVec = nil
+		if SERVER then
+			local held = self.Owner:GetNWEntity("piki")
+			if IsValid(held) and held ~= self.Owner then
+				self.Owner:SetNWEntity("piki", self.Owner)
+				ReleasePikmin(self.Owner, held, true)
+			end
+		end
+	end
 	self.Swarm = false
 	self.Whistling = false
 	if self.WhistleSound then self.WhistleSound:Stop() end
@@ -158,17 +286,7 @@ function SWEP:Think()
 			self:SetNWBool("Whistling", false)
 			self:SendWeaponAnim(ACT_VM_IDLE)
 		end
-		local owner = self.Owner
-		local tr = util.TraceLine({
-			start = owner:GetShootPos(),
-			endpos = owner:GetShootPos() + owner:GetAimVector() * 750,
-			filter = function(ent)
-				if IsValid(ent) and (ent:GetClass() == "pikmin" or ent:GetClass() == "pikmin_sprout") then
-					return false
-				end
-				return ent ~= owner and ent ~= self
-			end
-		})
+		local tr = GetAimTarget(self.Owner)
 		if tr.Hit then
 			local whistleRange = (10 + diffTime*150) * 1.75
 			local hasPluck = self.Owner:GetNWBool("pikipluck",false)
@@ -264,6 +382,7 @@ local function PikSWepKeyPress(ply, key)
 		local heldPikmin = ply:GetNWEntity("piki")
 		if IsValid(heldPikmin) and heldPikmin ~= ply then
 			heldPikmin:StopSound(heldPikmin.Color == 7 and "pikmin/pikmin_pink_grab.wav" or heldPikmin.Color == 8 and "pikmin/pikmin_rock_grab.wav" or "pikmin/grab.wav")
+			ReleasePikmin(ply, heldPikmin, true)
 		end
 		
 		local newColorPiki = pikminByColor[newColor]
@@ -273,6 +392,7 @@ local function PikSWepKeyPress(ply, key)
 			if ply:KeyDown(IN_ATTACK) then
 				local newHeld = newColorPiki[1]
 				ply:SetNWEntity("piki", newHeld)
+				HoldPikmin(ply, newHeld)
 				local grabSound = newColor == 7 and "pikmin/pikmin_pink_grab.wav" or newColor == 8 and "pikmin/pikmin_rock_grab.wav" or "pikmin/grab.wav"
 				newHeld:EmitSound(grabSound, 100, math.random(98, 105))
 				
@@ -312,9 +432,9 @@ local function PikSWepKeyPress(ply, key)
 			local throwpikmin = piki[1]
 			local grabSound = throwpikmin.Color == 7 and "pikmin/pikmin_pink_grab.wav" or throwpikmin.Color == 8 and "pikmin/pikmin_rock_grab.wav" or "pikmin/grab.wav"
 			timer.Simple(0.03,function() throwpikmin:EmitSound(grabSound, 100, math.random(98, 105)) end)
-			--throwpikmin:SetPos(ply:GetPos()+Vector(0,0,30))
-			--throwpikmin:SetParent(ply)
 			ply:SetNWEntity("piki",throwpikmin)
+			ply:SetNWInt("SelectedPikiColor", throwpikmin.Color)
+			HoldPikmin(ply, throwpikmin)
 		else
 			if ply:GetActiveWeapon().PunchTick and CurTime()-ply:GetActiveWeapon().PunchTick < 0.5 then return end
 			ply:GetActiveWeapon().PunchTick = CurTime()
@@ -438,12 +558,32 @@ local function PikSWepKeyPress(ply, key)
 						table.insert(posArray,basePos+disbandRight*sepDist*math.cos(angle)+disbandDir*sepDist*math.sin(angle))
 					end
 					for k,typ in ipairs(typeArray) do
-						for _,v in ipairs(typeDict[typ]) do
-							if v.Color == 7 then 
-								v:Disband() -- Winged Pikmin are not going to move if you disband them
-							else
-								v:Disband(posArray[k])
+						local groupPikmin = typeDict[typ]
+						local idx = 1
+						for _,v in ipairs(groupPikmin) do
+							local offset = Vector(0,0,0)
+							if idx > 1 then
+								local ring = 0
+								local ringIndex = 1
+								local ringCount = 1
+								local remaining = idx - 1
+								while remaining > 0 do
+									ring = ring + 1
+									local ringCapacity = ring * 6
+									if remaining <= ringCapacity then
+										ringIndex = remaining
+										ringCount = ringCapacity
+										remaining = 0
+									else
+										remaining = remaining - ringCapacity
+									end
+								end
+								local rVal = ring * 14
+								local theta = (ringIndex / ringCount) * 2 * math.pi
+								offset = Vector(rVal * math.cos(theta), rVal * math.sin(theta), 0)
 							end
+							v:Disband(posArray[k] + offset)
+							idx = idx + 1
 						end
 					end
 				end
@@ -508,6 +648,7 @@ local function PikSWepKeyRelease(ply, key)
 		local throwpikmin = ply:GetNWEntity("piki")
 		if IsValid(throwpikmin) and throwpikmin ~= ply then
 			ply:SetNWEntity("piki",ply)
+			ReleasePikmin(ply, throwpikmin, false)
 			if throwpikmin:GetPos():Distance(ply:GetPos()) <= 200 then
 				local aimVector = ply:GetAimVector()
 				ply:GetActiveWeapon():SendWeaponAnim(ACT_VM_PRIMARYATTACK)
@@ -525,11 +666,28 @@ local function PikSWepKeyRelease(ply, key)
 				local right = ply:EyeAngles():Right()
 				local up = ply:EyeAngles():Up()
 				local offset = right * 10 - up * 8 + aimVector * 20
+				local startPos
 				if aimVector.Z < -0.4 then
-					throwpikmin:SetPos((ply:GetShootPos() - Vector(0,0,16) + offset))
+					startPos = ply:GetShootPos() - Vector(0,0,16) + offset
 				else
-					throwpikmin:SetPos((ply:GetShootPos() + offset))
+					startPos = ply:GetShootPos() + offset
 				end
+				throwpikmin:SetPos(startPos)
+				
+				local trAim = GetAimTarget(ply)
+				local aimHitPos = trAim.HitPos
+				
+				local diff = aimHitPos - startPos
+				local diff2d = Vector(diff.x, diff.y, 0)
+				local dist2d = diff2d:Length()
+				
+				local t = math.max(0.2, dist2d / 400)
+				local gravityVal = GetConVar("sv_gravity"):GetFloat()
+				
+				local vel_h = diff2d:GetNormalized() * (dist2d / t)
+				local vel_z = (diff.z / t) + 0.5 * gravityVal * t
+				local vel = vel_h + Vector(0, 0, vel_z)
+				
 				timer.Simple(0,function() throwpikmin:StopSound(throwpikmin.Color == 7 and "pikmin/pikmin_pink_grab.wav" or throwpikmin.Color == 8 and "pikmin/pikmin_rock_grab.wav" or "pikmin/grab.wav") end)
 				local throwSound = throwpikmin.Color == 2 and "pikmin/pikmin_yellow_throw.wav" or throwpikmin.Color == 7 and "pikmin/pikmin_pink_throw.wav" or throwpikmin.Color == 8 and ("pikmin/pikmin_rock_throw" .. math.random(1, 2) .. ".wav") or "pikmin/pikmin_throw.wav"
 				local throwPitch = (throwpikmin.Color <= 3) and math.random(98, 102) or 100
@@ -538,7 +696,7 @@ local function PikSWepKeyRelease(ply, key)
 				throwpikmin.params.angle = (throwpikmin:GetPos()-ply:GetShootPos()):Angle()
 				if IsValid(phys) then
 					phys:EnableMotion(true)
-					phys:ApplyForceCenter(((aimVector*(force*forceMult) + Vector(0,0,5)) * 125))
+					phys:SetVelocity(vel)
 				end
 			end
 		end
@@ -657,9 +815,6 @@ if CLIENT then
 		local force = pikiColor == 2 and 56 or pikiColor == 7 and 50 or 40
 		local forceMult = 0.8 + math.min(0.3, CurTime() - wep.ClientThrowTick)
 
-		local mass = 10
-		local vel = (aimVector * (force * forceMult) + Vector(0,0,5)) * (125 / mass)
-
 		local right = ply:EyeAngles():Right()
 		local up = ply:EyeAngles():Up()
 		local offset = right * 10 - up * 8 + aimVector * 20
@@ -670,6 +825,20 @@ if CLIENT then
 		else
 			startPos = ply:GetShootPos() + offset
 		end
+
+		local trAim = GetAimTarget(ply)
+		local aimHitPos = trAim.HitPos
+		
+		local diff = aimHitPos - startPos
+		local diff2d = Vector(diff.x, diff.y, 0)
+		local dist2d = diff2d:Length()
+		
+		local t = math.max(0.2, dist2d / 400)
+		local gravityVal = GetConVar("sv_gravity"):GetFloat()
+		
+		local vel_h = diff2d:GetNormalized() * (dist2d / t)
+		local vel_z = (diff.z / t) + 0.5 * gravityVal * t
+		local vel = vel_h + Vector(0, 0, vel_z)
 		
 		local points = {}
 		table.insert(points, startPos)
@@ -720,21 +889,37 @@ if CLIENT then
 		local ply = LocalPlayer() if not IsValid(ply) then return end
 		local wep = ply:GetActiveWeapon() if not IsValid(wep) or wep:GetClass() ~= "olimar_gun" then return end
 
+		-- Draw the big pink cursor if thirdperson camera is active
+		if GetConVar("pikmin_camera"):GetBool() then
+			local tr = GetAimTarget(ply)
+			if tr.Hit and not tr.HitSky then
+				local dist = ply:GetShootPos():Distance(tr.HitPos)
+				if dist <= 600 then
+					local alpha = 220
+					if dist > 450 then
+						local ratio = (dist - 450) / 150
+						alpha = math.max(0, 220 * (1 - ratio))
+					end
+					
+					if alpha > 0 then
+						local cursorSize = 24 + dist * 0.06
+						
+						render.SetMaterial(Material("effects/select_ring"))
+						render.DrawQuadEasy(tr.HitPos + tr.HitNormal * 0.5, tr.HitNormal, cursorSize, cursorSize, Color(255, 100, 255, alpha), CurTime() * 45)
+						
+						render.SetMaterial(Material("sprites/light_glow02_add"))
+						render.DrawSprite(tr.HitPos + tr.HitNormal * 2, cursorSize * 0.4, cursorSize * 0.4, Color(255, 150, 255, alpha * (255 / 220)))
+					end
+				end
+			end
+		end
+
 		-- Whistle rendering & particle logic
 		if wep:GetNWBool("Whistling") then
 			local whistleStart = wep:GetNWFloat("WhistleStart", 0)
 			local diffTime = CurTime() - whistleStart
 			if diffTime >= 0 and diffTime <= 1.25 then
-				local tr = util.TraceLine({
-					start = ply:GetShootPos(),
-					endpos = ply:GetShootPos() + ply:GetAimVector() * 750,
-					filter = function(ent)
-						if IsValid(ent) and (ent:GetClass() == "pikmin" or ent:GetClass() == "pikmin_sprout" or ent:GetClass() == "pikmin_model") then
-							return false
-						end
-						return ent ~= ply and ent ~= wep
-					end
-				})
+				local tr = GetAimTarget(ply)
 				if tr.Hit then
 					local whistleRange = (10 + diffTime * 150) * 1.75
 					
