@@ -564,3 +564,118 @@ local function PikDontHitPlayer(ply,ent) --Pikmin are charging me! :(
 	return GAMEMODE:PlayerShouldTakeDamage(ply,ent)
 end
 hook.Add("PlayerShouldTakeDamage", "OMGPIKMINDONTHURTMEH", PikDontHitPlayer)
+
+-- find all Pikmin currently attached to an entity
+local function GetLatchedPikmin(ent)
+	local latched = {}
+	for _, v in ipairs(ents.FindByClass("pikmin")) do
+		if v.Attacking and v:GetParent() == ent then
+			table.insert(latched, v)
+		end
+	end
+	return latched
+end
+
+local ShakeOffSounds = { "pikmin/shakeoff1.wav", "pikmin/shakeoff2.wav" }
+
+-- left-click repeatedly to shake off latched Pikmin
+hook.Add("KeyPress", "PikminPlayerShakeOff", function(ply, key)
+	if not cvars.Bool("pik_shakeoff") then return end
+	if key ~= IN_ATTACK then return end
+	if (ply.NextShakeOff or 0) > CurTime() then return end
+	local latched = GetLatchedPikmin(ply)
+	if #latched == 0 then return end
+	ply.NextShakeOff = CurTime() + 0.55
+	for _, pik in ipairs(latched) do
+		pik:ShakeOff()
+	end
+	ply:EmitSound(ShakeOffSounds[math.random(#ShakeOffSounds)], 80, 100)
+end)
+
+-- 35% chance per damage event to shake off one random latched Pikmin
+hook.Add("EntityTakeDamage", "PikminNPCShakeOff", function(ent, dmgInfo)
+	if not cvars.Bool("pik_shakeoff") then return end
+	if not ent:IsNPC() then return end
+	-- 12% chance per damage event which is  enough that determined NPCs eventually shake one off,
+	-- but Pikmin stay latched through most of the fight
+	if math.random() > 0.12 then return end
+	local latched = GetLatchedPikmin(ent)
+	if #latched == 0 then return end
+	local victim = latched[math.random(#latched)]
+	victim:ShakeOff()
+	ent:EmitSound(ShakeOffSounds[math.random(#ShakeOffSounds)], 80, 100)
+end)
+
+-- NPCs treat Pikmin as higher-priority enemies than players
+hook.Add("OnEntityCreated", "PikminNPCTargetPriority", function(ent)
+	if not cvars.Bool("pik_npc_target_pikmin") then return end
+	timer.Simple(0.2, function() -- 0.2s delay (hopefully) ensures entity is fully initialized before altering relationships
+		if not IsValid(ent) then return end
+		if ent:IsNPC() then
+			-- NPCs give Pikmin a high priority of 99
+			ent:AddRelationship("pikmin D_HT 99")
+			ent.PikminRelationshipSet = true
+		elseif ent:GetClass() == "pikmin" then
+			for _, npc in ipairs(ents.GetAll()) do
+				if IsValid(npc) and npc:IsNPC() then
+					npc:AddRelationship("pikmin D_HT 99")
+					npc.PikminRelationshipSet = true
+				end
+			end
+		end
+	end)
+end)
+
+-- Force-update NPC target schedules
+timer.Create("PikminNPCTargetForceUpdate", 0.25, 0, function()
+	if not cvars.Bool("pik_npc_target_pikmin") then return end
+	
+	local piks = ents.FindByClass("pikmin")
+	if #piks == 0 then return end
+	
+	for _, npc in ipairs(ents.GetAll()) do
+		if IsValid(npc) and npc:IsNPC() and npc:Health() > 0 then
+			-- check if the NPC is targeting the player/Olimar or is hostile to them
+			local isHostile = false
+			for _, ply in ipairs(player.GetAll()) do
+				if IsValid(ply) and (npc:Disposition(ply) == D_HT or npc:Disposition(ply) == D_FR) then
+					isHostile = true
+					break
+				end
+			end
+			
+			if isHostile then
+				-- Apply class relationship if not set yet
+				if not npc.PikminRelationshipSet then
+					npc:AddRelationship("pikmin D_HT 99")
+					npc.PikminRelationshipSet = true
+				end
+
+				local closestPik = nil
+				local minDist = 1000 -- max detection distance
+				local npcPos = npc:GetPos()
+				
+				for _, pik in ipairs(piks) do
+					if IsValid(pik) and not pik.Dead then
+						local dist = npcPos:Distance(pik:GetPos())
+						if dist < minDist then
+							minDist = dist
+							closestPik = pik
+						end
+					end
+				end
+				
+				if closestPik then
+					local currentEnemy = npc:GetEnemy()
+					if currentEnemy ~= closestPik then
+						-- re-prioritize Pikmin
+						if not IsValid(currentEnemy) or currentEnemy:IsPlayer() or (currentEnemy:GetClass() == "pikmin" and minDist < npcPos:Distance(currentEnemy:GetPos()) - 50) then
+							npc:SetEnemy(closestPik)
+							npc:UpdateEnemyMemory(closestPik, closestPik:GetPos())
+						end
+					end
+				end
+			end
+		end
+	end
+end)

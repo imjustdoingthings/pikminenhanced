@@ -394,6 +394,49 @@ function ENT:Think()
 		self.IsGroundPounding = false
 	end
 
+	-- skip all AI while Pikmin is stunned, handle recovery
+	if self.ShakingOff then
+		if self.ShakeOffLanded and CurTime() >= (self.ShakeOffLandTime or 0) + (self.ShakeOffStunDur or 2.5) then
+			local prevTarget = self.ShakeOffPrevTarget
+			local prevOlimar = self.ShakeOffOlimar
+			self.ShakingOff     = nil
+			self.ShakeOffLanded  = nil
+			self.ShakeOffLandTime = nil
+			self.ShakeOffStunDur  = nil
+			self.ShakeOffPrevTarget = nil
+			self.ShakeOffOlimar   = nil
+			self.ShakeGetUpAnim   = nil
+			if IsValid(self.PikMdl) then
+				self.PikMdl.PlaybackRate = 1.0
+				self.PikMdl:SetPlaybackRate(1.0)
+			end
+			-- Re-enable physics so the Pikmin can move again
+			if IsValid(self.Phys) then
+				self.Phys:EnableMotion(true)
+				self.Phys:Wake()
+			end
+			-- 45% chance to play a sound on get-up
+			if math.random() < 0.45 then
+				self:EmitSound("pikmin/prepare1.wav", 75, math.random(100, 115))
+			end
+			-- Recovery
+			if IsValid(prevTarget) and not prevTarget.PikIgnore and prevTarget:Health() > 0
+				and self:GetPos():Distance(prevTarget:GetPos()) < 600 then
+				self:Charge(prevTarget)
+			elseif IsValid(prevOlimar) and prevOlimar:Alive()
+				and self:GetPos():Distance(prevOlimar:GetPos()) < 800 then
+				self.Olimar = prevOlimar
+				self.Dismissed = false
+				self:SetNWEntity("Olimar", prevOlimar)
+				if IsValid(self.PikMdl) then self.PikMdl:SetNWBool("Dismissed", false) end
+			else
+				self:Disband()
+			end
+		end
+		self:NextThink(CurTime() + 0.03)
+		return true
+	end
+
 	if not self.Dismissed and not self.Attacking and (not IsValid(self.Olimar) or not self.Olimar:Alive()) then self:Disband() end
 	if not IsValid(self.AttackTarget) or self.AttackTarget.PikIgnore then self.AttackTarget = nil end
 	
@@ -789,7 +832,7 @@ function ENT:Think()
 	end
 	
 	-- base animation selection
-	local baseAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or (self.IsGroundPounding and "groundpound") or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
+	local baseAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or (self.IsGroundPounding and "groundpound") or (self.ShakingOff and self.ShakeGetUpAnim) or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
 
 	-- Idle animation state
 	local isDoingIdleStuff = self.Dismissed and (baseAnim == "dismissed" or baseAnim == "idle" or baseAnim == self.WingedIdle) and speed < 30
@@ -929,6 +972,10 @@ function ENT:Think()
 					self.PikMdl.PlaybackRate = 1.0
 					self.PikMdl:SetPlaybackRate(1.0)
 				end
+			elseif self.ShakingOff then
+				self.PikMdl.PlaybackRate = 0
+				self.PikMdl:SetPlaybackRate(0)
+				self.PikMdl:SetCycle(0)
 			else
 				self.PikMdl.PlaybackRate = 1.0
 				self.PikMdl:SetPlaybackRate(1.0) -- Reset to default rate
@@ -1435,6 +1482,49 @@ function ENT:DoGroundPoundSlam(impactPos)
 	end
 end
 
+function ENT:ShakeOff()
+	if not self.Attacking then return end
+	self.ShakeOffPrevTarget = self.AttackTarget
+	self.ShakeOffOlimar     = self.Olimar
+
+	-- Detach from victim
+	self.Attacking   = false
+	self.AttackTarget = nil
+	local quickpos = self:GetPos() + Vector(0, 0, 8)
+	self:SetParent()
+	self:SetPos(quickpos)
+	if IsValid(self.Phys) then
+		self.Phys:EnableMotion(true)
+		local randDir  = VectorRand():GetNormalized()
+		randDir.z = math.Clamp(randDir.z + 0.4, 0.2, 0.9)  -- bias upward
+		randDir:Normalize()
+		local force = math.Rand(4000, 10000)
+		self.Phys:SetVelocity(Vector(0, 0, 0))
+		self.Phys:ApplyForceCenter(randDir * force)
+	end
+
+	local getupAnim
+	if self.Color == 5 then                          -- White
+		getupAnim = "shakegetup"
+	elseif self.Color == 4 or self.Color == 8 then  -- Purple, Rock
+		getupAnim = "fallgetup"
+	else
+		getupAnim = "getup"
+	end
+	self.ShakeGetUpAnim   = getupAnim
+	self.ShakingOff       = true
+	self.ShakeOffLanded   = false
+	self.ShakeOffStunDur  = math.Rand(1.9, 3.0)
+
+	if IsValid(self.PikMdl) then
+		self.PikMdl.LastAnim     = nil   -- force ResetSequence on next Think
+		self.PikMdl.Cycle        = 0     -- applied on next ResetSequence
+		self.PikMdl.CurAnim      = getupAnim
+		self.PikMdl.PlaybackRate = 0
+		self.PikMdl:SetPlaybackRate(0)
+	end
+end
+
 function ENT:LatchOn(ent)
 	if self.IsGroundPounding or (self.Color == 4 and self.Thrown and cvars.Bool("pik_purple_groundpound")) then
 		self:DoGroundPoundSlam(self:GetPos())
@@ -1488,7 +1578,8 @@ function ENT:PhysicsSimulate(phys, delta)
 	if self.params == nil then self.params = table.Copy(BaseShadowParams) self.params.angle = self:GetAngles() end
 	local params = self.params
 	params.pos = Vector(0, 0, 0)
-	params.angle = (self.Dismissed or self.Thrown or self.Attacking or self.Carrying) and self.params.angle or (pos - self:GetPos()):Angle()
+	-- ShakingOff: lock angle so the Pikmin tumbles freely without shadow control fighting the physics
+	params.angle = (self.Dismissed or self.Thrown or self.Attacking or self.Carrying or self.ShakingOff) and self.params.angle or (pos - self:GetPos()):Angle()
 	params.angle.p = self.Color == 7 and 25 or 0
 	params.deltatime = delta
 	phys:ComputeShadowControl(params)
@@ -1504,6 +1595,19 @@ local ValidEnemyList = {
 function ENT:PhysicsCollide(data,phys)
 	if self.IsGroundPounding or (self.Color == 4 and self.Thrown and cvars.Bool("pik_purple_groundpound")) then
 		self:DoGroundPoundSlam(data.HitPos)
+		return
+	end
+	-- freeze in place on ground contact
+	if self.ShakingOff and not self.ShakeOffLanded then
+		local hitEnt = data.HitEntity
+		if hitEnt:IsWorld() or (IsValid(hitEnt:GetPhysicsObject()) and not hitEnt:GetPhysicsObject():IsMotionEnabled()) then
+			self.ShakeOffLanded  = true
+			self.ShakeOffLandTime = CurTime()
+			if IsValid(self.Phys) then
+				self.Phys:SetVelocity(Vector(0, 0, 0))
+				self.Phys:EnableMotion(false)
+			end
+		end
 		return
 	end
 	if data.HitEntity.Breakable and (self.AttackTarget == data.HitEntity or self.Thrown) then timer.Simple(0,function() self:LatchOn(data.HitEntity) end) return end

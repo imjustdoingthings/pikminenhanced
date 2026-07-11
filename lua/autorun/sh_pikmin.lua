@@ -271,6 +271,8 @@ CreateConVar("pik_disband","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"enable Pikmin 
 CreateConVar("pik_white_poisongas","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable White Pikmin poison gas on death")
 CreateConVar("pik_purple_groundpound","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable Purple Pikmin ground pound on throw")
 CreateConVar("pik_superthrow","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"you can do this now")
+CreateConVar("pik_shakeoff","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Allow players and NPCs to shake off latched Pikmin")
+CreateConVar("pik_npc_target_pikmin","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"NPCs prioritize attacking Pikmin over players")
 CreateConVar("piki_mesh","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable PikiMesh squad formation")
 CreateConVar("piki_mesh_spacing","1.0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"PikiMesh spacing multiplier (0.1 to 5.0)")
 CreateConVar("piki_mesh_shape","wedge",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"PikiMesh formation shape (wedge, circle, square, diamond, triangle, hexagon)")

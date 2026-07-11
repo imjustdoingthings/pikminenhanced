@@ -129,13 +129,19 @@ local function GetAimTarget(ply)
 		})
 
 		if not tr.Hit then
+			tr.Hit = true
 			tr.HitPos = targetPos
+			tr.HitNormal = Vector(0, 0, 1)
+		end
+		if not tr.HitNormal or tr.HitNormal:LengthSqr() < 0.01 then
+			tr.HitNormal = Vector(0, 0, 1)
 		end
 		return tr
 	else
+		local endpos = ply:GetShootPos() + ply:GetAimVector() * 750
 		local tr = util.TraceLine({
 			start = ply:GetShootPos(),
-			endpos = ply:GetShootPos() + ply:GetAimVector() * 750,
+			endpos = endpos,
 			filter = function(ent)
 				if IsValid(ent) and (ent:GetClass() == "pikmin" or ent:GetClass() == "pikmin_sprout" or ent:GetClass() == "pikmin_model") then
 					return false
@@ -143,6 +149,14 @@ local function GetAimTarget(ply)
 				return ent ~= ply
 			end
 		})
+		if not tr.Hit then
+			tr.Hit = true
+			tr.HitPos = endpos
+			tr.HitNormal = Vector(0, 0, 1)
+		end
+		if not tr.HitNormal or tr.HitNormal:LengthSqr() < 0.01 then
+			tr.HitNormal = Vector(0, 0, 1)
+		end
 		return tr
 	end
 end
@@ -312,14 +326,16 @@ function SWEP:Think()
 			local hasPluck = self.Owner:GetNWBool("pikipluck",false)
 			if hasPluck then
 				for _,v in ipairs(ents.FindByClass("pikmin_sprout")) do
-					if v:GetPos():Distance(tr.HitPos) <= whistleRange then
+					local dist = util.DistanceToLine(self.Owner:GetShootPos(), tr.HitPos, v:GetPos())
+					if dist <= whistleRange then
 						v:Pluck(self.Owner,true)
 					end
 				end
 			end
 			local drownTick = CurTime() + 0.1
 			for _,v in ipairs(ents.FindByClass("pikmin")) do
-				if v:GetPos():Distance(tr.HitPos) <= whistleRange and self.Owner:GetForward():Dot((self.Owner:GetPos()-v:GetPos()):GetNormalized()) < 0 then
+				local dist = util.DistanceToLine(self.Owner:GetShootPos(), tr.HitPos, v:GetPos())
+				if dist <= whistleRange and self.Owner:GetForward():Dot((self.Owner:GetPos()-v:GetPos()):GetNormalized()) < 0 then
 					if v.Olimar == self.Owner then
 						if v.AttackTarget and not v.Drinking then
 							v:Drop()
