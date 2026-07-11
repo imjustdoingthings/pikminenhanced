@@ -385,7 +385,7 @@ function ENT:Think()
 				if vel.z < -10 then
 					self.IsGroundPounding = true
 					if IsValid(self.PikMdl) then
-						self.PikMdl.CurAnim = "dosin"
+						self.PikMdl.CurAnim = "groundpound"
 					end
 				end
 			end
@@ -789,7 +789,7 @@ function ENT:Think()
 	end
 	
 	-- base animation selection
-	local baseAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or (self.IsGroundPounding and "dosin") or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
+	local baseAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or (self.IsGroundPounding and "groundpound") or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
 
 	-- Idle animation state
 	local isDoingIdleStuff = self.Dismissed and (baseAnim == "dismissed" or baseAnim == "idle" or baseAnim == self.WingedIdle) and speed < 30
@@ -919,7 +919,7 @@ function ENT:Think()
 	else
 		self.PikMdl.CurAnim = baseAnim
 		if IsValid(self.PikMdl) then
-			if baseAnim == "dosin" then
+			if baseAnim == "groundpound" then
 				local cycle = self.PikMdl:GetCycle()
 				if cycle >= 0.95 then
 					self.PikMdl.PlaybackRate = 0
