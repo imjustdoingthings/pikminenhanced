@@ -42,6 +42,47 @@ function ENT:Think()
 			self.Emitter = nil
 		end
 	end
+
+	-- procedural squash for Purple Pikmin Ground Pound on client that I'm gonna get back to later
+	local impactTime = self:GetNWFloat("GroundPoundImpactTime", 0)
+	local bone = self:LookupBone("Pik_Body")
+	if bone then
+		local spineScale = Vector(1, 1, 1)
+		local legScale = Vector(1, 1, 1)
+		
+		if impactTime > 0 then
+			local dt = CurTime() - impactTime
+			if dt >= 0 and dt < 0.35 then
+				if dt < 0.1 then
+					local frac = dt / 0.1
+					local z = Lerp(frac, 0.488, 0.514)
+					local xy = Lerp(frac, 1.858, 1.794)
+					spineScale = Vector(z, xy, xy)
+					legScale = Vector(0.001, 0.001, 0.001)
+				elseif dt < 0.2 then
+					local frac = (dt - 0.1) / 0.1
+					local z = Lerp(frac, 0.514, 0.582)
+					local xy = Lerp(frac, 1.794, 1.636)
+					spineScale = Vector(z, xy, xy)
+					legScale = Vector(0.001, 0.001, 0.001)
+				elseif dt < 0.3 then
+					local frac = (dt - 0.2) / 0.1
+					local z = Lerp(frac, 0.582, 1.0)
+					local xy = Lerp(frac, 1.636, 1.0)
+					spineScale = Vector(z, xy, xy)
+					local legFrac = Lerp(frac, 0.001, 1.0)
+					legScale = Vector(legFrac, legFrac, legFrac)
+				end
+			end
+		end
+		
+		self:ManipulateBoneScale(bone, spineScale)
+		
+		local lLeg = self:LookupBone("Pik_LL")
+		local rLeg = self:LookupBone("Pik_RL")
+		if lLeg then self:ManipulateBoneScale(lLeg, legScale) end
+		if rLeg then self:ManipulateBoneScale(rLeg, legScale) end
+	end
 end
 
 function ENT:Draw()

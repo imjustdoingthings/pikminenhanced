@@ -14,6 +14,11 @@ function ENT:Think()
 		self.LastAnim = self.CurAnim
 		self:ResetSequence(self.CurAnim)
 		if self.Cycle then self:SetCycle(self.Cycle) self.Cycle = nil end
+		local rate = self.PlaybackRate or 1.0
+		self:SetPlaybackRate(rate)
+	end
+	if self.PlaybackRate and self:GetPlaybackRate() ~= self.PlaybackRate then
+		self:SetPlaybackRate(self.PlaybackRate)
 	end
 	self:NextThink(CurTime())
 	return true

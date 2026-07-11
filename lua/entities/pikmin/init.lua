@@ -371,6 +371,29 @@ function ENT:Think()
 		self.LastNWThrown = self.Thrown
 		self:SetNWBool("Thrown", self.Thrown)
 	end
+	
+	-- height detection for Purple Pikmin's groundpound
+	if self.Color == 4 and self.Thrown and cvars.Bool("pik_purple_groundpound") then
+		local phys = self:GetPhysicsObject()
+		if IsValid(phys) then
+			local vel = phys:GetVelocity()
+			if self.IsGroundPounding then
+				-- gradual downward acceleration (just adds negative vertical velocity each tick)
+				local newZ = math.max(vel.z - 80, -900)
+				phys:SetVelocity(Vector(vel.x, vel.y, newZ))
+			else
+				if vel.z < -10 then
+					self.IsGroundPounding = true
+					if IsValid(self.PikMdl) then
+						self.PikMdl.CurAnim = "dosin"
+					end
+				end
+			end
+		end
+	else
+		self.IsGroundPounding = false
+	end
+
 	if not self.Dismissed and not self.Attacking and (not IsValid(self.Olimar) or not self.Olimar:Alive()) then self:Disband() end
 	if not IsValid(self.AttackTarget) or self.AttackTarget.PikIgnore then self.AttackTarget = nil end
 	
@@ -766,10 +789,10 @@ function ENT:Think()
 	end
 	
 	-- base animation selection
-	local baseAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
+	local baseAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or (self.IsGroundPounding and "dosin") or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
 
 	-- Idle animation state
-	local isDoingIdleStuff = self.Dismissed and (baseAnim == "dismissed" or baseAnim == "idle" or baseAnim == self.WingedIdle) and speed < 2
+	local isDoingIdleStuff = self.Dismissed and (baseAnim == "dismissed" or baseAnim == "idle" or baseAnim == self.WingedIdle) and speed < 30
 	if not isDoingIdleStuff then
 		-- Interrupt any plaaying idle animation when the Pikmin has something to do or is moving/squaded.
 		if self.IdleAnimState then
@@ -779,6 +802,7 @@ function ENT:Think()
 			self.IdleAnimCurrent = nil
 			self.IdleAnimIsBackward = nil
 			if IsValid(self.PikMdl) then
+				self.PikMdl.PlaybackRate = 1.0
 				self.PikMdl:SetPlaybackRate(1.0)
 			end
 		end
@@ -878,23 +902,37 @@ function ENT:Think()
 		end
 	end
 
-	-- Determine final CurAnim and PlaybackRate to use
-	if self.IdleAnimCurrent and self.IdleAnimState then self.PikMdl.CurAnim = self.IdleAnimCurrent
-		
-		-- Freeze playback rate during sitting hold and force cycle
+	if self.IdleAnimCurrent and self.IdleAnimState then
+		self.PikMdl.CurAnim = self.IdleAnimCurrent
+
 		if self.IdleAnimState == "sitting_hold" then
+			self.PikMdl.PlaybackRate = 0
 			self.PikMdl:SetPlaybackRate(0)
 			local freezeCycle = (self.Color == 4 or self.Color == 8 or self.Color == 5) and 0.5 or 0.4
 			self.PikMdl:SetCycle(freezeCycle)
 		else
 			-- Set playback rate to negative for backward phase
 			local rate = self.IdleAnimIsBackward and -0.85 or 0.85
+			self.PikMdl.PlaybackRate = rate
 			self.PikMdl:SetPlaybackRate(rate)
 		end
 	else
 		self.PikMdl.CurAnim = baseAnim
 		if IsValid(self.PikMdl) then
-			self.PikMdl:SetPlaybackRate(1.0) -- Reset to default rate
+			if baseAnim == "dosin" then
+				local cycle = self.PikMdl:GetCycle()
+				if cycle >= 0.95 then
+					self.PikMdl.PlaybackRate = 0
+					self.PikMdl:SetPlaybackRate(0)
+					self.PikMdl:SetCycle(0.99)
+				else
+					self.PikMdl.PlaybackRate = 1.0
+					self.PikMdl:SetPlaybackRate(1.0)
+				end
+			else
+				self.PikMdl.PlaybackRate = 1.0
+				self.PikMdl:SetPlaybackRate(1.0) -- Reset to default rate
+			end
 		end
 	end
 
@@ -1328,7 +1366,82 @@ function IsCarryObject(ent)
 	return false
 end
 
+function ENT:DoGroundPoundSlam(impactPos)
+	self.IsGroundPounding = false
+	self.Thrown = false
+	self:Disband()
+	
+	-- Sound
+	self:EmitSound("pikmin/groundslam.wav", 100, 100)
+	
+	-- Particles (HL2 Thumper Dust ring)
+	local effect = EffectData()
+	effect:SetOrigin(impactPos)
+	effect:SetScale(2.5)
+	util.Effect("ThumperDust", effect) 
+	
+	-- Screen shake
+	util.ScreenShake(impactPos, 8, 5, 0.5, 300)
+	
+	-- damage + stun in radius (120 units)
+	local radius = 120
+	local damage = 100
+	
+	-- calculate damage and apply stun
+	for _, v in ipairs(ents.FindInSphere(impactPos, radius)) do
+		if IsValid(v) and v ~= self and v ~= self.Olimar and v:GetClass() ~= "pikmin" and v:GetClass() ~= "pikmin_model" then
+			local targetPos = v:NearestPoint(impactPos)
+			local dist = targetPos:Distance(impactPos)
+			local fraction = math.Clamp(1.0 - (dist / radius), 0, 1)
+			local finalDamage = math.Round(damage * fraction)
+			
+			if finalDamage > 0 then
+				local dmgInfo = DamageInfo()
+				dmgInfo:SetDamage(finalDamage)
+				dmgInfo:SetAttacker(IsValid(self.Olimar) and self.Olimar or self)
+				dmgInfo:SetInflictor(self)
+				dmgInfo:SetDamageType(DMG_BLAST)
+				v:TakeDamageInfo(dmgInfo)
+			end
+			
+			-- Stun effect
+			if v:IsNPC() then
+				if COND_NPC_FREEZE then
+					v:SetCondition(COND_NPC_FREEZE)
+					local npc = v
+					timer.Simple(2.5, function()
+						if IsValid(npc) then
+							npc:ClearCondition(COND_NPC_FREEZE)
+						end
+					end)
+				else
+					-- fallback stun 
+					v:SetNPCState(NPC_STATE_LOST)
+				end
+			elseif v:IsPlayer() then
+				v:Freeze(true)
+				local ply = v
+				timer.Simple(1.5, function()
+					if IsValid(ply) then
+						ply:Freeze(false)
+					end
+				end)
+			end
+		end
+	end
+	
+	-- trigger procedural squash-and-stretch 
+	local mdl = self.PikMdl
+	if IsValid(mdl) then
+		mdl:SetNWFloat("GroundPoundImpactTime", CurTime())
+	end
+end
+
 function ENT:LatchOn(ent)
+	if self.IsGroundPounding or (self.Color == 4 and self.Thrown and cvars.Bool("pik_purple_groundpound")) then
+		self:DoGroundPoundSlam(self:GetPos())
+		return
+	end
 	if not self:IsValidVictim(ent) then return end
 	if ent:GetClass() == "pikmin_gas" and not (self.Color == 5 or self.Color == 6) then self.Poison = true return end
 	if self.Color == 8 then
@@ -1391,6 +1504,10 @@ local ValidEnemyList = {
 
 --//Used to detect a collision when thrown; stopping the spin animation
 function ENT:PhysicsCollide(data,phys)
+	if self.IsGroundPounding or (self.Color == 4 and self.Thrown and cvars.Bool("pik_purple_groundpound")) then
+		self:DoGroundPoundSlam(data.HitPos)
+		return
+	end
 	if data.HitEntity.Breakable and (self.AttackTarget == data.HitEntity or self.Thrown) then timer.Simple(0,function() self:LatchOn(data.HitEntity) end) return end
 	if self.Thrown then
 		local validcarry = IsCarryObject(data.HitEntity)
