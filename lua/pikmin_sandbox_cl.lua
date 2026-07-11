@@ -33,6 +33,8 @@ hook.Add("PopulateToolMenu","PikiToolMenu",function()
 		panel:ControlHelp("#pikimenu.whitegas2")
 		local groundpoundbox = panel:CheckBox("#pikimenu.purplegroundpound", "pik_purple_groundpound")
 		panel:ControlHelp("#pikimenu.purplegroundpound2")
+		local superthrowbox = panel:CheckBox("#pikimenu.superthrow", "pik_superthrow")
+		panel:ControlHelp("#pikimenu.superthrow2")
 		
 		local meshbox = panel:CheckBox("Enable Pikmin Meshing", "piki_mesh")
 		panel:ControlHelp("Makes Pikmin group behind you in a fixed array at a fixed distance. This copies how Pikmin move in the squad in Pikmin 1-4.")

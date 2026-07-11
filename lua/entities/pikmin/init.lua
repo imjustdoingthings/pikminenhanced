@@ -1369,7 +1369,9 @@ end
 function ENT:DoGroundPoundSlam(impactPos)
 	self.IsGroundPounding = false
 	self.Thrown = false
-	self:Disband()
+	-- Only disband AI-controlled Pikmin; player-controlled Pikmin can't be dismissed
+	-- Can't believe I had to add this but hooray
+	if not self.PikPly then self:Disband() end
 	
 	-- Sound
 	self:EmitSound("pikmin/groundslam.wav", 100, 100)
@@ -1389,43 +1391,39 @@ function ENT:DoGroundPoundSlam(impactPos)
 	
 	-- calculate damage and apply stun
 	for _, v in ipairs(ents.FindInSphere(impactPos, radius)) do
-		if IsValid(v) and v ~= self and v ~= self.Olimar and v:GetClass() ~= "pikmin" and v:GetClass() ~= "pikmin_model" then
-			local targetPos = v:NearestPoint(impactPos)
-			local dist = targetPos:Distance(impactPos)
-			local fraction = math.Clamp(1.0 - (dist / radius), 0, 1)
-			local finalDamage = math.Round(damage * fraction)
-			
-			if finalDamage > 0 then
-				local dmgInfo = DamageInfo()
-				dmgInfo:SetDamage(finalDamage)
-				dmgInfo:SetAttacker(IsValid(self.Olimar) and self.Olimar or self)
-				dmgInfo:SetInflictor(self)
-				dmgInfo:SetDamageType(DMG_BLAST)
-				v:TakeDamageInfo(dmgInfo)
-			end
-			
-			-- Stun effect
-			if v:IsNPC() then
-				if COND_NPC_FREEZE then
-					v:SetCondition(COND_NPC_FREEZE)
-					local npc = v
-					timer.Simple(2.5, function()
-						if IsValid(npc) then
-							npc:ClearCondition(COND_NPC_FREEZE)
-						end
-					end)
-				else
-					-- fallback stun 
-					v:SetNPCState(NPC_STATE_LOST)
-				end
-			elseif v:IsPlayer() then
-				v:Freeze(true)
-				local ply = v
-				timer.Simple(1.5, function()
-					if IsValid(ply) then
-						ply:Freeze(false)
+		-- Never affect: self, Olimar, other Pikmin entities, or any player (allies, Olimar, Pikmin-players)
+		if not IsValid(v) then continue end
+		if v == self then continue end
+		if v:IsPlayer() then continue end
+		if v:GetClass() == "pikmin" or v:GetClass() == "pikmin_model" then continue end
+		
+		local targetPos = v:NearestPoint(impactPos)
+		local dist = targetPos:Distance(impactPos)
+		local fraction = math.Clamp(1.0 - (dist / radius), 0, 1)
+		local finalDamage = math.Round(damage * fraction)
+		
+		if finalDamage > 0 then
+			local dmgInfo = DamageInfo()
+			dmgInfo:SetDamage(finalDamage)
+			dmgInfo:SetAttacker(IsValid(self.Olimar) and self.Olimar or self)
+			dmgInfo:SetInflictor(self)
+			dmgInfo:SetDamageType(DMG_BLAST)
+			v:TakeDamageInfo(dmgInfo)
+		end
+		
+		-- Stun NPCs only
+		if v:IsNPC() then
+			if COND_NPC_FREEZE then
+				v:SetCondition(COND_NPC_FREEZE)
+				local npc = v
+				timer.Simple(2.5, function()
+					if IsValid(npc) then
+						npc:ClearCondition(COND_NPC_FREEZE)
 					end
 				end)
+			else
+				-- fallback stun
+				v:SetNPCState(NPC_STATE_LOST)
 			end
 		end
 	end

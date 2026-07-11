@@ -64,6 +64,26 @@ local function ReleasePikmin(ply, piki, isCanceled)
 	end
 end
 
+local function CalcThrowVelocity(startPos, aimHitPos)
+	local diff = aimHitPos - startPos
+	local diff2d = Vector(diff.x, diff.y, 0)
+	local dist2d = diff2d:Length()
+	
+	local t = math.max(0.2, dist2d / 400)
+	local gravityVal = GetConVar("sv_gravity"):GetFloat()
+	
+	local vel_h = diff2d:GetNormalized() * (dist2d / t)
+	local vel_z = (diff.z / t) + 0.5 * gravityVal * t
+	
+	-- clamp upward velocity to prevent sky-high throws (
+	-- unless superthrow is enabled)
+	if not cvars.Bool("pik_superthrow") then
+		vel_z = math.min(vel_z, 350)
+	end
+	
+	return vel_h + Vector(0, 0, vel_z)
+end
+
 local function GetAimTarget(ply)
 	local isThirdperson = false
 	if CLIENT then
@@ -711,16 +731,7 @@ local function PikSWepKeyRelease(ply, key)
 				local trAim = GetAimTarget(ply)
 				local aimHitPos = trAim.HitPos
 				
-				local diff = aimHitPos - startPos
-				local diff2d = Vector(diff.x, diff.y, 0)
-				local dist2d = diff2d:Length()
-				
-				local t = math.max(0.2, dist2d / 400)
-				local gravityVal = GetConVar("sv_gravity"):GetFloat()
-				
-				local vel_h = diff2d:GetNormalized() * (dist2d / t)
-				local vel_z = (diff.z / t) + 0.5 * gravityVal * t
-				local vel = vel_h + Vector(0, 0, vel_z)
+				local vel = CalcThrowVelocity(startPos, aimHitPos)
 				
 				timer.Simple(0,function() throwpikmin:StopSound(throwpikmin.Color == 7 and "pikmin/pikmin_pink_grab.wav" or throwpikmin.Color == 8 and "pikmin/pikmin_rock_grab.wav" or "pikmin/grab.wav") end)
 				local throwSound = throwpikmin.Color == 2 and "pikmin/pikmin_yellow_throw.wav" or throwpikmin.Color == 7 and "pikmin/pikmin_pink_throw.wav" or throwpikmin.Color == 8 and ("pikmin/pikmin_rock_throw" .. math.random(1, 2) .. ".wav") or "pikmin/pikmin_throw.wav"
@@ -863,16 +874,7 @@ if CLIENT then
 		local trAim = GetAimTarget(ply)
 		local aimHitPos = trAim.HitPos
 		
-		local diff = aimHitPos - startPos
-		local diff2d = Vector(diff.x, diff.y, 0)
-		local dist2d = diff2d:Length()
-		
-		local t = math.max(0.2, dist2d / 400)
-		local gravityVal = GetConVar("sv_gravity"):GetFloat()
-		
-		local vel_h = diff2d:GetNormalized() * (dist2d / t)
-		local vel_z = (diff.z / t) + 0.5 * gravityVal * t
-		local vel = vel_h + Vector(0, 0, vel_z)
+		local vel = CalcThrowVelocity(startPos, aimHitPos)
 		
 		local points = {}
 		table.insert(points, startPos)
