@@ -19,6 +19,28 @@ CarryIdle (12)
 CarryRun (13)
 --]]
 
+-- 1=Red, 2=Yellow, 3=Blue, 4=Purple, 5=White, 6=Bulbmin, 7=Winged, 8=Rock, 9=Mushroom
+local IDLE_ANIMS_STANDARD = { "stemfidget", "stretcharms", "chatting", "lookback", "stretch" }
+local IDLE_ANIMS_HEAVY    = { "stemfidget", "stretcharms", "chatting", "sitnstand" }  -- Purple, Rock (there is no lookback animation, their sit replaced)
+local IDLE_ANIMS_WHITE    = { "stemfidget", "stretchcharms", "chatting", "sitnstand" }  -- White (uses stretchcharms, they do not have a lookback animation)
+
+-- Which colors use which table
+local function GetIdleAnimTable(color)
+	if color == 4 or color == 8 then return IDLE_ANIMS_HEAVY
+	elseif color == 5 then return IDLE_ANIMS_WHITE
+	elseif color == 1 or color == 2 or color == 3 then return IDLE_ANIMS_STANDARD
+	else return nil  -- other colors use no idle anims for now
+	end
+end
+
+-- Returns true if this is a "sit" animation that has sitting hold and branch behavior
+local function IsSitAnim(anim)
+	return anim == "sitnstand"
+end
+
+-- Returns true if this is a lookback animation that needs to play forward then backward; so, a ping-pong animation 
+local function IsLookbackAnim(anim) return anim == "lookback" or anim == "lookbehind" end
+
 function ENT:SpawnFunction(ply,tr)
 	ply:ConCommand("pikmin_menu")
 end
@@ -743,8 +765,140 @@ function ENT:Think()
 		end
 	end
 	
-	self.PikMdl.CurAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
-	
+	-- base animation selection
+	local baseAnim = self.Called and "join" or self.Attacking and "attack" or self.Drinking and "nectar" or self.Thrown and "thrown" or (OnFire or self.Poison) and "onfire" or self.Drowning and "drowning" or InWater and "swimming" or speed >= 6 and (self.Color == 7 and self.WingedIdle or "running") or (self.Dismissed and (self.Color == 7 and self.WingedIdle or "dismissed") or self.WingedIdle)
+
+	-- Idle animation state
+	local isDoingIdleStuff = self.Dismissed and (baseAnim == "dismissed" or baseAnim == "idle" or baseAnim == self.WingedIdle) and speed < 2
+	if not isDoingIdleStuff then
+		-- Interrupt any plaaying idle animation when the Pikmin has something to do or is moving/squaded.
+		if self.IdleAnimState then
+			self.IdleAnimState = nil
+			self.IdleAnimEnd = nil
+			self.IdleAnimSitMidDone = nil
+			self.IdleAnimCurrent = nil
+			self.IdleAnimIsBackward = nil
+			if IsValid(self.PikMdl) then
+				self.PikMdl:SetPlaybackRate(1.0)
+			end
+		end
+	end
+
+	if self.IdleAnimState then
+		local mdl = self.PikMdl
+		if IsValid(mdl) then
+			if self.IdleAnimState == "playing" then
+				if CTime >= (self.IdleAnimEnd or 0) then
+					-- lookback animations need to play both forward and then backwards
+					if IsLookbackAnim(self.IdleAnimCurrent or "") and not self.IdleAnimIsBackward then
+						self.IdleAnimIsBackward = true
+						
+						local fullDur = mdl:SequenceDuration(self.IdleAnimCurrent) or 2.0
+						if fullDur <= 0 then fullDur = 2.0 end
+						self.IdleAnimEnd = CTime + (fullDur / 0.85)
+						
+						mdl:SetCycle(1.0) -- Start backward playback from the end frame
+					-- Check for the sit animation'
+					elseif IsSitAnim(self.IdleAnimCurrent or "") and not self.IdleAnimSitMidDone then
+						-- intro finished, choose next state
+						local sitHoldDur = self.IdleAnimSitHoldDur or math.Rand(1.0, 2.0)
+						if self.Color == 4 or self.Color == 8 or self.Color == 5 then
+							-- Purple, Rock, White have branching choices
+							-- the rest will likely not as their animations are totally screwed
+							local branchChance = math.random()
+							if branchChance < 0.5 then
+								-- choose sitlean or sitlookup
+								local branchAnim = "sitlean"
+								if self.Color == 5 and math.random() < 0.5 then
+									branchAnim = "sitlookup"
+								end
+								
+								self.IdleAnimCurrent = branchAnim
+								self.IdleAnimState = "sitting_branch"
+								
+								local branchDur = mdl:SequenceDuration(branchAnim) or 1.5
+								if branchDur <= 0 then branchDur = 1.5 end
+								self.IdleAnimEnd = CTime + (branchDur / 0.85)
+								self.IdleAnimSitMidDone = true
+							else
+								-- Stay sitting
+								self.IdleAnimState = "sitting_hold" -- Good boy
+								self.IdleAnimEnd = CTime + sitHoldDur
+								self.IdleAnimSitMidDone = true
+							end
+						else
+							-- Red, Blue, Yellow stay sitting
+							self.IdleAnimState = "sitting_hold" -- Good boy
+							self.IdleAnimEnd = CTime + sitHoldDur
+							self.IdleAnimSitMidDone = true
+						end
+					else
+						-- end idle animation
+						self.IdleAnimState = nil
+						self.IdleAnimEnd = nil
+						self.IdleAnimSitMidDone = nil
+						self.IdleAnimCurrent = nil
+						self.IdleAnimIsBackward = nil
+					end
+				end
+			elseif self.IdleAnimState == "sitting_hold" then
+				if CTime >= (self.IdleAnimEnd or 0) then
+					-- the sitting hold finished, so play stand-up outro
+					self.IdleAnimState = "playing"
+					local sitAnim = (self.Color == 4 or self.Color == 8 or self.Color == 5) and "sitnstand" or "stretch"
+					self.IdleAnimCurrent = sitAnim
+					
+					local startCycle = (self.Color == 4 or self.Color == 8 or self.Color == 5) and 0.5 or 0.4
+					mdl.Cycle = startCycle -- Sync start cycle to the Pikmin's model
+					
+					local fullDur = mdl:SequenceDuration(sitAnim) or 2.0
+					if fullDur <= 0 then fullDur = 2.0 end
+					
+					local outroDur = (1.0 - startCycle) * fullDur
+					self.IdleAnimEnd = CTime + (outroDur / 0.85)
+					self.IdleAnimSitMidDone = true
+				end
+			elseif self.IdleAnimState == "sitting_branch" then
+				if CTime >= (self.IdleAnimEnd or 0) then
+					-- stand-up outro 2
+					self.IdleAnimState = "playing"
+					local sitAnim = "sitnstand"
+					self.IdleAnimCurrent = sitAnim
+					
+					mdl.Cycle = 0.5
+					
+					local fullDur = mdl:SequenceDuration(sitAnim) or 2.0
+					if fullDur <= 0 then fullDur = 2.0 end
+					
+					local outroDur = 0.5 * fullDur
+					self.IdleAnimEnd = CTime + (outroDur / 0.85)
+					self.IdleAnimSitMidDone = true
+				end
+			end
+		end
+	end
+
+	-- Determine final CurAnim and PlaybackRate to use
+	if self.IdleAnimCurrent and self.IdleAnimState then self.PikMdl.CurAnim = self.IdleAnimCurrent
+		
+		-- Freeze playback rate during sitting hold and force cycle
+		if self.IdleAnimState == "sitting_hold" then
+			self.PikMdl:SetPlaybackRate(0)
+			local freezeCycle = (self.Color == 4 or self.Color == 8 or self.Color == 5) and 0.5 or 0.4
+			self.PikMdl:SetCycle(freezeCycle)
+		else
+			-- Set playback rate to negative for backward phase
+			local rate = self.IdleAnimIsBackward and -0.85 or 0.85
+			self.PikMdl:SetPlaybackRate(rate)
+		end
+	else
+		self.PikMdl.CurAnim = baseAnim
+		if IsValid(self.PikMdl) then
+			self.PikMdl:SetPlaybackRate(1.0) -- Reset to default rate
+		end
+	end
+
+	-- idle sounds
 	if cvars.Bool("pik_idle") and CTime >= (self.IdleSoundNext or 0) then
 		local nextIdle = IsValid(self.Olimar) and self.Olimar.NextPikiIdle or PIKI_GLOBAL_NEXT_IDLE or 0
 		if CTime >= nextIdle then
@@ -762,6 +916,45 @@ function ENT:Think()
 				end
 			end
 		end
+	end
+
+	-- idle animation trigger block
+	if isDoingIdleStuff and not self.IdleAnimState then
+		self.NextIdleAnimCheck = self.NextIdleAnimCheck or (CTime + math.random(3, 8))
+		if CTime >= self.NextIdleAnimCheck then
+			-- reset check timer 
+			self.NextIdleAnimCheck = CTime + math.random(4, 8)
+			
+			--  every Pikmin has a 40% chance of starting an idle animation when check timer fires
+			if math.random() < 0.4 then
+				local animTable = GetIdleAnimTable(self.Color)
+				if animTable then
+					local anim = animTable[math.random(#animTable)]
+					self.IdleAnimCurrent = anim
+					self.IdleAnimSitMidDone = false
+					self.IdleAnimIsBackward = false
+					
+					local mdl = self.PikMdl
+					local seqDur = IsValid(mdl) and mdl:SequenceDuration(anim) or 2.0
+					if seqDur <= 0 then seqDur = 2.0 end
+					
+					if IsSitAnim(anim) then
+						self.IdleAnimState = "playing"
+						local sitIntroRatio = (self.Color == 4 or self.Color == 8 or self.Color == 5) and 0.5 or 0.4
+						self.IdleAnimEnd = CTime + (sitIntroRatio * seqDur / 0.85)
+						self.IdleAnimSitHoldDur = math.Rand(1.0, 2.0) -- Sitting duration is multiplied by 1-2x
+					else
+						self.IdleAnimState = "playing"
+						self.IdleAnimEnd = CTime + (seqDur / 0.85)
+					end
+					
+					-- Set NextIdleAnimCheck to  after the animation finishes plus a cooldown
+					self.NextIdleAnimCheck = self.IdleAnimEnd + math.random(6, 15)
+				end
+			end
+		end
+	elseif not isDoingIdleStuff then
+		self.NextIdleAnimCheck = nil
 	end
 	if not self.Called and not self.Drinking and not self.Attacking then
 		if self.Dismissed then
@@ -1358,3 +1551,5 @@ function ENT:PostEntityPaste(ply,ent,created)
 	end
 	ent.EntityMods = nil
 end
+
+-- this code is so chonky, I wonder if we can cut down.
