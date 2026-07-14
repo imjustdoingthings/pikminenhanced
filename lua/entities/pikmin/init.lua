@@ -745,7 +745,7 @@ function ENT:Think()
 		if not isSwarming and not self.AttackTarget and not self.PikPly and not inStructuredDisband then
 			targetPos = targetPos + Vector(0,0,75)
 		end
-		local shouldFloat = not self.Thrown and not self.Dead
+		local shouldFloat = not self.Thrown and not self.Dead and not self.ShakingOff
 		if IsValid(self.Phys) then
 			if self.Phys:IsGravityEnabled() == shouldFloat then
 				self.Phys:EnableGravity(not shouldFloat)
