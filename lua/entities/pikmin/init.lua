@@ -1549,6 +1549,9 @@ function ENT:ShakeOff()
 	self:SetPos(quickpos)
 	if IsValid(self.Phys) then
 		self.Phys:EnableMotion(true)
+		if self.Color == 7 then
+			self.Phys:EnableGravity(true)
+		end
 		local randDir  = VectorRand():GetNormalized()
 		randDir.z = math.Clamp(randDir.z + 0.4, 0.2, 0.9)  -- bias upward
 		randDir:Normalize()
