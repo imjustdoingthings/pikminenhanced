@@ -3,7 +3,9 @@ AddCSLuaFile("shared.lua")
 include("shared.lua")
 -- small oopsy?
 local function IsValidFood(obj)
-	return obj:GetClass() == "prop_physics" and table.KeyFromValue(PikiCarryOnionList,obj:GetModel())
+	if not IsValid(obj) then return false end
+	local class = obj:GetClass()
+	return (class == "prop_physics" or class == "prop_ragdoll") and (table.KeyFromValue(PikiCarryOnionList,obj:GetModel()) or obj:GetNWBool("iscarry", false))
 end
 
 function ENT:Pull(obj)
@@ -160,7 +162,7 @@ function ENT:Think()
 			timer.Create("suck"..self:EntIndex(),0.8,1,function() self.CurAnim = 4 end)
 			self.EXID = self.EXID + 1
 			
-			local pikCount = PikiFueDict[v:GetModel()] or math.random(1,3)
+			local pikCount = v.PikiSproutsCount or PikiFueDict[v:GetModel()] or math.random(1,3)
 			if PikiFueSDict[v:GetModel()] and v:GetSkin() == self.Skin then
 				pikCount = pikCount * 2
 			end

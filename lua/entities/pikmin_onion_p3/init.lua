@@ -86,7 +86,9 @@ function ENT:SpawnFunction(ply, tr)
 	ply:ConCommand("pikmin_p3ospawnmenu")
 end
 local function IsValidFood(obj)
-	return obj:GetClass() == "prop_physics" and (table.KeyFromValue(PikiCarryOnionList, obj:GetModel()) or obj:GetNWBool("iscarry", false))
+	if not IsValid(obj) then return false end
+	local class = obj:GetClass()
+	return (class == "prop_physics" or class == "prop_ragdoll") and (table.KeyFromValue(PikiCarryOnionList, obj:GetModel()) or obj:GetNWBool("iscarry", false))
 end
 
 function ENT:Pull(obj)
@@ -143,7 +145,7 @@ function ENT:Think()
 			timer.Create("suck" .. self:EntIndex(), 0.8, 1, function() if IsValid(self) then self.CurAnim = 2 end end)
 			self.EXID = self.EXID + 1
 
-			local pikCount = PikiFueDict[v:GetModel()] or math.random(1, 3)
+			local pikCount = v.PikiSproutsCount or PikiFueDict[v:GetModel()] or math.random(1, 3)
 			local fColor = self.Color
 			
 			timer.Create("expel" .. self:EntIndex() .. self.EXID, 1.8, 1, function()

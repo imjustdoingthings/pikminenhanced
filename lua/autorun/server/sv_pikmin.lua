@@ -596,14 +596,27 @@ end)
 hook.Add("EntityTakeDamage", "PikminNPCShakeOff", function(ent, dmgInfo)
 	if not cvars.Bool("pik_shakeoff") then return end
 	if not ent:IsNPC() then return end
-	-- 12% chance per damage event which is  enough that determined NPCs eventually shake one off,
-	-- but Pikmin stay latched through most of the fight
-	if math.random() > 0.12 then return end
+	
 	local latched = GetLatchedPikmin(ent)
 	if #latched == 0 then return end
-	local victim = latched[math.random(#latched)]
-	victim:ShakeOff()
-	ent:EmitSound(ShakeOffSounds[math.random(#ShakeOffSounds)], 80, 100)
+	
+	-- 3% chance to shake off ALL latched Pikmin at once (big body shake)
+	if math.random() <= 0.03 then
+		for _, victim in ipairs(latched) do
+			if IsValid(victim) then
+				victim:ShakeOff()
+			end
+		end
+		ent:EmitSound(ShakeOffSounds[math.random(#ShakeOffSounds)], 85, 95)
+		return
+	end
+	
+	-- Standard 12% chance to shake off ONE random latched Pikmin
+	if math.random() <= 0.12 then
+		local victim = latched[math.random(#latched)]
+		victim:ShakeOff()
+		ent:EmitSound(ShakeOffSounds[math.random(#ShakeOffSounds)], 80, 100)
+	end
 end)
 
 -- NPCs treat Pikmin as higher-priority enemies than players
@@ -730,4 +743,111 @@ hook.Add("OnEntityCreated", "PikminAutoCarryAll", function(ent)
 			pikimax = autovalue2
 		})
 	end)
+end)
+
+--// NPC carry system
+local function SolidifyAndPrepareRagdoll(maxHp, ragdoll)
+	if not IsValid(ragdoll) or ragdoll.PikminCarcassPrepared then return end
+	ragdoll.PikminCarcassPrepared = true
+	
+	-- enable collisions with players, props, and physics
+	ragdoll:SetCollisionGroup(COLLISION_GROUP_NONE)
+	
+	-- weld all physics objects of the ragdoll to the root physics object (index 0)
+	-- this solidifies the ragdoll so it moves as a single solid body without floppy limbs, just like make statue does in the C menu
+	local physCount = ragdoll:GetPhysicsObjectCount()
+	if physCount > 1 then
+		for i = 1, physCount - 1 do
+			local physBone = ragdoll:GetPhysicsObjectNum(i)
+			if IsValid(physBone) then
+				constraint.Weld(ragdoll, ragdoll, 0, i, 0, true, false)
+			end
+		end
+	end
+	
+	-- calculate carry weight and sprouts based on NPC health
+	local weight = math.max(1, math.floor(maxHp / 15))
+	local maxCarriers = weight * 2
+	local sprouts = math.max(1, math.floor(maxHp / 15))
+	
+	-- wake up all physics bones, enable motion, and clear pickup restrictions
+	for i = 0, physCount - 1 do
+		local physBone = ragdoll:GetPhysicsObjectNum(i)
+		if IsValid(physBone) then
+			physBone:Wake()
+			physBone:EnableMotion(true)
+			physBone:ClearGameFlag(FVPHYSICS_NO_PLAYER_PICKUP) -- Allow player physgun/gravity gun pickup!
+			
+			if i == 0 then
+				physBone:SetMass(weight * 50)
+			end
+		end
+	end
+	
+	-- recalculates due to new collision rules
+	ragdoll:CollisionRulesChanged()
+	
+	-- set network variables so our HUD and movement loops recognize it
+	ragdoll.DidWeight = true
+	ragdoll.PikiSproutsCount = sprouts
+	ragdoll:SetNWInt("pikiweight", weight)
+	ragdoll:SetNWInt("pikimax", maxCarriers)
+	ragdoll:SetNWBool("iscarry", true)
+	ragdoll.IsCarry = true
+	
+	-- Also store in duplicator so it persists!
+	duplicator.StoreEntityModifier(ragdoll, "PikminCarry", {
+		iscarry = true,
+		pikiweight = weight,
+		pikimax = maxCarriers
+	})
+end
+
+hook.Add("OnNPCKilled", "PikminPropifyKilled", function(npc, attacker, inflictor)
+	local byPikmin = false
+	if IsValid(attacker) and attacker:GetClass() == "pikmin" then byPikmin = true end
+	if IsValid(inflictor) and inflictor:GetClass() == "pikmin" then byPikmin = true end
+	
+	if byPikmin then
+		npc.PikminKilledBy = true
+		local model = npc:GetModel()
+		local pos = npc:GetPos()
+		local ang = npc:GetAngles()
+		local skin = npc:GetSkin()
+		local maxHp = npc:GetMaxHealth()
+		
+		-- spawn our own server-side ragdoll carcass immediately!
+		local rag = ents.Create("prop_ragdoll")
+		if IsValid(rag) then
+			rag:SetModel(model)
+			rag:SetPos(pos + Vector(0, 0, 8)) -- slightly lift to prevent getting stuck in ground
+			rag:SetAngles(ang)
+			rag:SetSkin(skin)
+			
+			-- Copy bodygroups
+			for i = 0, npc:GetNumBodyGroups() - 1 do
+				rag:SetBodygroup(i, npc:GetBodygroup(i))
+			end
+			
+			rag:Spawn()
+			
+			-- Solidify and configure carry parameters
+			SolidifyAndPrepareRagdoll(maxHp, rag)
+		end
+		
+		-- remove the NPC immediately to prevent any default client/server ragdoll from spawning
+		npc:Remove()
+	end
+end)
+
+hook.Add("CreateEntityRagdoll", "PikminReplaceRagdoll", function(owner, ragdoll)
+	if IsValid(owner) and owner.PikminKilledBy then
+		if IsValid(ragdoll) then
+			timer.Simple(0, function()
+				if IsValid(ragdoll) then
+					ragdoll:Remove()
+				end
+			end)
+		end
+	end
 end)

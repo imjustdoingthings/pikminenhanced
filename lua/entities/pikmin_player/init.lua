@@ -35,8 +35,8 @@ local function GetChargeTarget(pos,aim,ignore)
 	if IsValid(tr.Entity) then
 		if tr.Entity.PikIgnore then return end
 		local class = tr.Entity:GetClass()
-		if class == "pikmin" or class == "pikmin_onion" or class == "pikmin_model" or class == "prop_ragdoll" or class == "pikmin_sprout" then return end
-		if class == "prop_physics" and not (table.KeyFromValue(PikiCarryOnionList,tr.Entity:GetModel()) or tr.Entity.IsCarry) then return end
+		if class == "pikmin" or class == "pikmin_onion" or class == "pikmin_model" or class == "pikmin_sprout" then return end
+		if (class == "prop_physics" or class == "prop_ragdoll") and not (table.KeyFromValue(PikiCarryOnionList,tr.Entity:GetModel()) or tr.Entity.IsCarry) then return end
 		if (class == "pikmin_fire" or class == "pikmin_gas" or class == "pikmin_wire") and tr.Entity:Health() <= 0 then return end
 		if string.sub(class,1,4) == "func" then return end
 	end

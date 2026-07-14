@@ -16,10 +16,18 @@ TOOL:BuildConVarList()
 function TOOL:LeftClick(trace)
 	if trace.HitWorld then return end
 	local ent = trace.Entity
-	if not IsValid(ent) or ent:GetClass() ~= "prop_physics" then return end
+	if not IsValid(ent) then return end
+	local class = ent:GetClass()
+	if class ~= "prop_physics" and class ~= "prop_ragdoll" then return end
 	
-	if not ent.LastMass then ent.LastMass = ent:GetPhysicsObject():GetMass() end
-	local autovalue = math.max(1,math.floor(ent:GetPhysicsObject():GetMass()/50))
+	local phys = ent:GetPhysicsObject()
+	local mass = 100
+	if IsValid(phys) then
+		if not ent.LastMass then ent.LastMass = phys:GetMass() end
+		mass = phys:GetMass()
+	end
+	
+	local autovalue = math.max(1,math.floor(mass/50))
 	local autovalue2 = autovalue*2
 	local dictInfo = PikiCarryDict[ent:GetModel()]
 	if dictInfo then autovalue,autovalue2 = dictInfo[1],dictInfo[2] end
@@ -27,12 +35,15 @@ function TOOL:LeftClick(trace)
 	ent.DidWeight = true
 	local mincarry = self:GetClientNumber("autoweight") == 1 and autovalue or math.max(1,self:GetClientNumber("min"))
 	local maxcarry = self:GetClientNumber("automax") == 1 and autovalue2 or math.max(1,self:GetClientNumber("max"))
-	ent:GetPhysicsObject():SetMass(mincarry*50)
+	if IsValid(phys) then
+		phys:SetMass(mincarry*50)
+	end
 	ent:SetNWInt("pikiweight",mincarry)
 	ent:SetNWInt("pikimax",maxcarry)
 	ent:SetNWBool("iscarry",true)
 	ent.IsCarry = true
 	ent.PikMove = ent:GetNWInt("weight") >= mincarry
+	
 	if SERVER then
 		duplicator.StoreEntityModifier(ent, "PikminCarry", {
 			iscarry = true,
@@ -46,10 +57,16 @@ end
 function TOOL:RightClick(trace)
 	if trace.HitWorld then return end
 	local ent = trace.Entity
-	if not IsValid(ent) or ent:GetClass() ~= "prop_physics" then return end
+	if not IsValid(ent) then return end
+	local class = ent:GetClass()
+	if class ~= "prop_physics" and class ~= "prop_ragdoll" then return end
 	local ply = self:GetOwner()
 	
-	local autovalue = math.max(1,math.floor(ent:GetPhysicsObject():GetMass()/50))
+	local phys = ent:GetPhysicsObject()
+	local mass = 100
+	if IsValid(phys) then mass = phys:GetMass() end
+	
+	local autovalue = math.max(1,math.floor(mass/50))
 	local autovalue2 = autovalue*2
 	local dictInfo = PikiCarryDict[ent:GetModel()]
 	if dictInfo then autovalue,autovalue2 = dictInfo[1],dictInfo[2] end
@@ -62,13 +79,19 @@ end
 function TOOL:Reload(trace)
 	if trace.HitWorld then return end
 	local ent = trace.Entity
-	if not IsValid(ent) or ent:GetClass() ~= "prop_physics" then return end
+	if not IsValid(ent) then return end
+	local class = ent:GetClass()
+	if class ~= "prop_physics" and class ~= "prop_ragdoll" then return end
 	local dictInfo = PikiCarryDict[ent:GetModel()]
 	ent.IsCarry = dictInfo and true or false
 	ent.DidWeight = true
 	
-	if ent.LastMass then ent:GetPhysicsObject():SetMass(ent.LastMass) end
-	local autovalue = math.max(1,math.floor(ent:GetPhysicsObject():GetMass()/50))
+	local phys = ent:GetPhysicsObject()
+	if IsValid(phys) then
+		if ent.LastMass then phys:SetMass(ent.LastMass) end
+	end
+	local mass = IsValid(phys) and phys:GetMass() or 100
+	local autovalue = math.max(1,math.floor(mass/50))
 	local autovalue2 = autovalue*2
 	if dictInfo then autovalue,autovalue2 = dictInfo[1],dictInfo[2] end
 	
@@ -76,6 +99,7 @@ function TOOL:Reload(trace)
 	ent:SetNWInt("pikimax",autovalue2)
 	ent:SetNWBool("iscarry",dictInfo and true or false)
 	ent.PikMove = ent:GetNWInt("weight") >= autovalue
+	
 	if SERVER then
 		if dictInfo then
 			duplicator.StoreEntityModifier(ent, "PikminCarry", {
@@ -152,25 +176,32 @@ end
 function TOOL:Think()
 	if CLIENT then if not HookedDraw then HookedDraw = true hook.Add("PreDrawEffects","PikiToolCarry",ToolCarryDraw) end end
 	local trace = self:GetOwner():GetEyeTrace()
-	if not trace.HitWorld and IsValid(trace.Entity) and trace.Entity:GetClass() == "prop_physics" then
+	if not trace.HitWorld and IsValid(trace.Entity) then
 		local ent = trace.Entity
-		if SERVER then
-			if not ent.DidWeight then
-				ent.DidWeight = true
-				local autovalue = math.max(1,math.floor(trace.Entity:GetPhysicsObject():GetMass()/50))
-				local autovalue2 = autovalue*2
-				local dictInfo = PikiCarryDict[trace.Entity:GetModel()]
-				if dictInfo then autovalue,autovalue2 = dictInfo[1],dictInfo[2] end
-				ent:SetNWInt("pikiweight",autovalue)
-				ent:SetNWInt("pikimax",autovalue2)
+		local class = ent:GetClass()
+		if class == "prop_physics" or class == "prop_ragdoll" then
+			if SERVER then
+				if not ent.DidWeight then
+					ent.DidWeight = true
+					local phys = ent:GetPhysicsObject()
+					local mass = IsValid(phys) and phys:GetMass() or 100
+					local autovalue = math.max(1,math.floor(mass/50))
+					local autovalue2 = autovalue*2
+					local dictInfo = PikiCarryDict[ent:GetModel()]
+					if dictInfo then autovalue,autovalue2 = dictInfo[1],dictInfo[2] end
+					ent:SetNWInt("pikiweight",autovalue)
+					ent:SetNWInt("pikimax",autovalue2)
+				end
 			end
-		end
-		if CLIENT then
-			EntityMin = ent:GetNWInt("pikiweight")
-			EntityMax = ent:GetNWInt("pikimax")
-			EntityCur = ent:GetNWInt("weight")
-			EntityValid = ent:GetNWBool("iscarry") or PikiCarryDict[ent:GetModel()]
-			EntityDraw = ent
+			if CLIENT then
+				EntityMin = ent:GetNWInt("pikiweight")
+				EntityMax = ent:GetNWInt("pikimax")
+				EntityCur = ent:GetNWInt("weight")
+				EntityValid = ent:GetNWBool("iscarry") or PikiCarryDict[ent:GetModel()]
+				EntityDraw = ent
+			end
+		else
+			if CLIENT then EntityDraw = nil end
 		end
 	else
 		if CLIENT then EntityDraw = nil end

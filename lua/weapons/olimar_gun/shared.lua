@@ -269,8 +269,8 @@ function SWEP:SecondaryAttack()
 			if not IsValid(tr.Entity) then return end
 		end
 		local class = tr.Entity:GetClass()
-		if class == "pikmin" or class == "pikmin_onion" or class == "pikmin_model" or class == "prop_ragdoll" or class == "pikmin_sprout" or class == "pikmin_bud" then return end
-		if class == "prop_physics" and not (table.KeyFromValue(PikiCarryOnionList,tr.Entity:GetModel()) or tr.Entity.IsCarry) then return end
+		if class == "pikmin" or class == "pikmin_onion" or class == "pikmin_model" or class == "pikmin_sprout" or class == "pikmin_bud" then return end
+		if (class == "prop_physics" or class == "prop_ragdoll") and not (table.KeyFromValue(PikiCarryOnionList,tr.Entity:GetModel()) or tr.Entity.IsCarry) then return end
 		if (class == "pikmin_fire" or class == "pikmin_gas" or class == "pikmin_wire") and tr.Entity:Health() <= 0 then return end
 		if string.sub(class,1,4) == "func" and class ~= "func_breakable" then return end
 		if tr.Entity.IsCarry and tr.Entity:GetNWInt("pikimax") ~= 0 and tr.Entity:GetNWInt("piki") >= tr.Entity:GetNWInt("pikimax") then return end

@@ -247,18 +247,38 @@ function ENT:Carry(obj)
 	self.IsCarry = nil
 	if self.Carrying then return end
 	if obj.PikIgnore then return end
+	
+	local phys = obj:GetPhysicsObject()
+	local mass = 100
+	if IsValid(phys) then
+		mass = phys:GetMass()
+	end
+	
 	local maxCount = obj:GetNWInt("pikimax")
 	local minWeight = obj:GetNWInt("pikiweight")
 	local dictInfo = PikiCarryDict[obj:GetModel()]
 	if maxCount == 0 then
-		if dictInfo then maxCount = dictInfo[2] else maxCount = math.floor(obj:GetPhysicsObject():GetMass()/10)*2 end
+		if dictInfo then 
+			maxCount = dictInfo[2] 
+		else 
+			maxCount = math.max(1, math.floor(mass/10)*2) 
+		end
 		obj:SetNWInt("pikimax",maxCount)
 	end
 	if minWeight == 0 then
-		if dictInfo then minWeight = dictInfo[1] else minWeight = math.floor(obj:GetPhysicsObject():GetMass()/10) end
+		if dictInfo then 
+			minWeight = dictInfo[1] 
+		else 
+			minWeight = math.max(1, math.floor(mass/10)) 
+		end
 		obj:SetNWInt("pikiweight",minWeight)
 	end
-	if obj:GetNWInt("piki") >= maxCount or not obj:GetPhysicsObject():IsMotionEnabled() then self.AttackTarget = nil return end
+	
+	if obj:GetNWInt("piki") >= maxCount or (IsValid(phys) and not phys:IsMotionEnabled()) then 
+		self.AttackTarget = nil 
+		return 
+	end
+	
 	obj:SetNWInt("piki",obj:GetNWInt("piki")+1)
 	obj:SetNWInt("weight",obj:GetNWInt("weight")+self.CarryWeight)
 	obj.PikMove = obj:GetNWInt("weight") >= minWeight
@@ -267,7 +287,7 @@ function ENT:Carry(obj)
 	self:SetAngles(Angle(0,(obj:GetPos()-self:GetPos()):Angle().Y,0))
 	self.CarryWeld = constraint.Weld(self,obj,0,0,0,true,false)
 	self.CarryObject = obj
-	self.CarryMass = math.Clamp(obj:GetPhysicsObject():GetMass(),400,2000)/math.max(1,self.CarryWeight/3)
+	self.CarryMass = math.Clamp(mass,400,2000)/math.max(1,self.CarryWeight/3)
 	self.CarryDist = 10000
 	if not obj.CarrySound then obj.CarrySound = CreateSound(obj,"pikmin/carry.wav") end
 	if not obj.CarryD or (self.Color ~= 3 and obj.CarryWater) then
