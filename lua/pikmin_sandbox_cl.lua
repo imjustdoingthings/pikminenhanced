@@ -14,7 +14,11 @@ end)
 
 hook.Add("PopulateToolMenu","PikiToolMenu",function()
 	spawnmenu.AddToolMenuOption("Utilities","Pikmin","PikiSettings","#pikimenu.settings","","",function(panel)
-		panel:Help("#pikimenu.general"):SetFont("DermaLarge")
+		local logo = vgui.Create("DImage", panel)
+		logo:SetImage("vgui/logos/pikilogo.png") -- new logo
+		logo:SetSize(256, 64)
+		logo:SetKeepAspect(true)
+		panel:AddItem(logo)
 		
 		local n = panel:NumSlider("#pikimenu.max","pik_field",0,9999,0)
 		n:SetDefaultValue(PikiMaxField)
@@ -39,6 +43,8 @@ hook.Add("PopulateToolMenu","PikiToolMenu",function()
 		panel:ControlHelp("#pikimenu.shakeoff2")
 		local npctargetbox = panel:CheckBox("#pikimenu.npctargetpikmin", "pik_npc_target_pikmin")
 		panel:ControlHelp("#pikimenu.npctargetpikmin2")
+		local crushbox = panel:CheckBox("#pikimenu.enablecrushing", "pik_enable_crushing")
+		panel:ControlHelp("#pikimenu.enablecrushing2")
 		
 		local meshbox = panel:CheckBox("Enable Pikmin Meshing", "piki_mesh")
 		panel:ControlHelp("Makes Pikmin group behind you in a fixed array at a fixed distance. This copies how Pikmin move in the squad in Pikmin 1-4.")

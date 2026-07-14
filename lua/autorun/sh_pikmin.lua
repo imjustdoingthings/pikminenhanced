@@ -276,6 +276,7 @@ CreateConVar("pik_npc_target_pikmin","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"NPCs
 CreateConVar("piki_mesh","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable PikiMesh squad formation")
 CreateConVar("piki_mesh_spacing","1.0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"PikiMesh spacing multiplier (0.1 to 5.0)")
 CreateConVar("piki_mesh_shape","wedge",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"PikiMesh formation shape (wedge, circle, square, diamond, triangle, hexagon)")
+CreateConVar("pik_enable_crushing","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable falling props to crush soft-bodied Pikmin or bury Rock Pikmin")
 
 
 local PikminAdminRestrictedClasses = {

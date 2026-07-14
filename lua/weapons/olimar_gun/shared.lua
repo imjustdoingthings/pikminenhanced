@@ -336,6 +336,7 @@ function SWEP:Think()
 			for _,v in ipairs(ents.FindByClass("pikmin")) do
 				local dist = util.DistanceToLine(self.Owner:GetShootPos(), tr.HitPos, v:GetPos())
 				if dist <= whistleRange and self.Owner:GetForward():Dot((self.Owner:GetPos()-v:GetPos()):GetNormalized()) < 0 then
+					if v:GetNWBool("Buried") then continue end
 					if v.Olimar == self.Owner then
 						if v.AttackTarget and not v.Drinking then
 							v:Drop()

@@ -394,6 +394,44 @@ function ENT:Think()
 		self.IsGroundPounding = false
 	end
 
+	-- skip all AI if crushed/squished
+	if self:GetNWBool("Crushed") then
+		self:NextThink(CurTime() + 0.03)
+		return true
+	end
+
+	-- skip all AI if buried (Rock Pikmin)
+	if self:GetNWBool("Buried") then
+		local elapsed = CurTime() - (self.BuryTime or CurTime())
+		local progress = math.Clamp(elapsed / 5.0, 0, 1)
+		self:SetNWFloat("BuryProgress", progress)
+		
+		if elapsed >= 5.0 then
+			self.Buried = false
+			self:SetNWBool("Buried", false)
+			self:EmitSound("pikmin/burrowpull.wav", 80, 100)
+			
+			if IsValid(self.Phys) then
+				self.Phys:EnableMotion(true)
+				self.Phys:Wake()
+			end
+			-- then resume follow/squad behavior
+			local prevOlimar = self.BuryOlimar
+			self.BuryOlimar = nil
+			if IsValid(prevOlimar) and prevOlimar:Alive() then
+				self.Olimar = prevOlimar
+				self.Dismissed = false
+				self:SetNWEntity("Olimar", prevOlimar)
+				if IsValid(self.PikMdl) then self.PikMdl:SetNWBool("Dismissed", false) end
+			else
+				self:Disband()
+			end
+		end
+		
+		self:NextThink(CurTime() + 0.03)
+		return true
+	end
+
 	-- skip all AI while Pikmin is stunned, handle recovery
 	if self.ShakingOff then
 		if self.ShakeOffLanded and CurTime() >= (self.ShakeOffLandTime or 0) + (self.ShakeOffStunDur or 2.5) then
@@ -1263,16 +1301,18 @@ local function CreateDeathSoul(pos,color)
 	end
 end
 
-local function DeathRagdoll(ent, pikColor)
+local function DeathRagdoll(ent, pikColor, silent)
 	if IsValid(ent) then
 		local pos = ent:GetPos()
 		CreateDeathSoul(pos,DeathColorVectors[pikColor])
-		if pikColor == 7 then
-			sound.Play("pikmin/pikmin_pink_die.wav", pos, 100, math.random(95, 110), 1)
-		elseif pikColor == 8 then
-			sound.Play("pikmin/pikmin_rock_die.wav", pos, 100, math.random(95, 110), 1)
-		else
-			sound.Play("pikmin/pikmin_pop.wav", pos, 100, math.random(95, 110), 1)
+		if not silent then
+			if pikColor == 7 then
+				sound.Play("pikmin/pikmin_pink_die.wav", pos, 100, math.random(95, 110), 1)
+			elseif pikColor == 8 then
+				sound.Play("pikmin/pikmin_rock_die.wav", pos, 100, math.random(95, 110), 1)
+			else
+				sound.Play("pikmin/pikmin_pop.wav", pos, 100, math.random(95, 110), 1)
+			end
 		end
 	end
 end
@@ -1304,19 +1344,33 @@ function ENT:Die()
 	(self.BurnTick or self.Poison) and "pikmin/pikmin_die3.wav" or
 	self.Drowning and "pikmin/pikmin_die2.wav" or "pikmin/pikmin_die.wav")
 	
-	if self.Shock then
-		self.PikMdl:Remove()
-		local effectdata = EffectData()
-		effectdata:SetOrigin(self:GetPos())
-		util.Effect("pikmin_shock",effectdata)
-		timer.Simple(0.25,function() if not IsValid(self) then return end DeathRagdoll(self, pikColor) self:Remove() end)
+	local isCrushed = self:GetNWBool("Crushed")
+	if self.Shock or isCrushed then
+		if self.Shock then
+			if IsValid(self.PikMdl) then self.PikMdl:Remove() end
+			local effectdata = EffectData()
+			effectdata:SetOrigin(self:GetPos())
+			util.Effect("pikmin_shock",effectdata)
+			timer.Simple(0.25,function() if not IsValid(self) then return end DeathRagdoll(self, pikColor, false) self:Remove() end)
+		else
+			-- keep model visible on the ground for 0.25s during fade/ghost release
+			timer.Simple(0.25, function()
+				if not IsValid(self) then return end
+				DeathRagdoll(self, pikColor, false) -- plays default pop sound
+				if IsValid(self.PikMdl) then self.PikMdl:Remove() end
+				self:Remove()
+			end)
+		end
 		return
 	end
 	
 	local rag = self:CreatePikRagdoll(false)
-	if self.BurnTick then rag:Ignite(math.Rand(8,10),0) end
-	timer.Simple(math.Rand(1.6, 2.5),function() if not IsValid(rag) then return end DeathRagdoll(rag, pikColor) rag:Remove() end)
-	if pikColor == 5 then self.PikMdl:Remove() return end
+	if self.BurnTick and IsValid(rag) then rag:Ignite(math.Rand(8,10),0) end
+	
+	timer.Simple(math.Rand(1.6, 2.5),function() if not IsValid(rag) then return end DeathRagdoll(rag, pikColor, false) rag:Remove() end)
+	if pikColor == 5 then
+		if IsValid(self.PikMdl) then self.PikMdl:Remove() end
+	end
 	self:Remove()
 end
 
@@ -1525,6 +1579,58 @@ function ENT:ShakeOff()
 	end
 end
 
+--// squish/crush Pikmin when a prop or physics object falls on them
+function ENT:Squish(prop)
+	if self.Dead or self:GetNWBool("Crushed") then return end
+	
+	self:SetNWBool("Crushed", true)
+	self:EmitSound("pikmin/crush.wav", 80, 100)
+
+	self.Squished = true
+	self.Attacking = false
+	self.AttackTarget = nil
+	self:SetParent() -- detach
+	
+	if IsValid(self.Phys) then
+		self.Phys:SetVelocity(Vector(0,0,0))
+		self.Phys:EnableMotion(false)
+	end
+	
+	-- trigger death sequence after 2.5 seconds
+	timer.Create("PikminCrushDeath_" .. self:EntIndex(), 2.5, 1, function()
+		if IsValid(self) then
+			self:Die()
+		end
+	end)
+end
+
+--// bury Rock Pikmin into the ground
+function ENT:Bury()
+	if self.Dead or self:GetNWBool("Buried") then return end
+	
+	self:SetNWBool("Buried", true)
+	self:SetNWFloat("BuryProgress", 0.0)
+	self:EmitSound("pikmin/burrow.wav", 80, 100)
+	
+	-- disable movement and physics while buried
+	self.Buried = true
+	self.BuryTime = CurTime()
+	self.Attacking = false
+	self.AttackTarget = nil
+	self:SetParent() -- Detach if parented
+	
+	-- make them impervious to control
+	self.BuryOlimar = self.Olimar
+	self.Olimar = nil
+	self:SetNWEntity("Olimar", nil)
+	if IsValid(self.PikMdl) then self.PikMdl:SetNWBool("Dismissed", true) end
+	
+	if IsValid(self.Phys) then
+		self.Phys:SetVelocity(Vector(0,0,0))
+		self.Phys:EnableMotion(false)
+	end
+end
+
 function ENT:LatchOn(ent)
 	if self.IsGroundPounding or (self.Color == 4 and self.Thrown and cvars.Bool("pik_purple_groundpound")) then
 		self:DoGroundPoundSlam(self:GetPos())
@@ -1593,6 +1699,26 @@ local ValidEnemyList = {
 
 --//Used to detect a collision when thrown; stopping the spin animation
 function ENT:PhysicsCollide(data,phys)
+	-- prop crush/bury logic
+	local hitEnt = data.HitEntity
+	if cvars.Bool("pik_enable_crushing") and IsValid(hitEnt) and not self:GetNWBool("Crushed") and not self:GetNWBool("Buried") then
+		local class = hitEnt:GetClass()
+		if (class == "prop_physics" or class == "prop_physics_multiplayer") and not hitEnt:IsPlayer() and not hitEnt:IsNPC() then
+			-- Prop must be falling/moving downwards and be physically above the Pikmin
+			if data.TheirOldVelocity.z < -15 and hitEnt:WorldSpaceCenter().z > self:WorldSpaceCenter().z then
+				if self.Color == 7 then
+					-- Winged Pikmin are immune to crushing
+					return
+				elseif self.Color == 8 then
+					self:Bury()
+				else
+					self:Squish(hitEnt) --bye
+				end
+				return
+			end
+		end
+	end
+
 	if self.IsGroundPounding or (self.Color == 4 and self.Thrown and cvars.Bool("pik_purple_groundpound")) then
 		self:DoGroundPoundSlam(data.HitPos)
 		return

@@ -47,41 +47,85 @@ function ENT:Think()
 	local impactTime = self:GetNWFloat("GroundPoundImpactTime", 0)
 	local bone = self:LookupBone("Pik_Body")
 	if bone then
-		local spineScale = Vector(1, 1, 1)
-		local legScale = Vector(1, 1, 1)
+		local isCrushed = IsValid(parent) and parent:GetNWBool("Crushed")
+		local isBuried = IsValid(parent) and parent:GetNWBool("Buried")
 		
-		if impactTime > 0 then
-			local dt = CurTime() - impactTime
-			if dt >= 0 and dt < 0.35 then
-				if dt < 0.1 then
-					local frac = dt / 0.1
-					local z = Lerp(frac, 0.488, 0.514)
-					local xy = Lerp(frac, 1.858, 1.794)
-					spineScale = Vector(z, xy, xy)
-					legScale = Vector(0.001, 0.001, 0.001)
-				elseif dt < 0.2 then
-					local frac = (dt - 0.1) / 0.1
-					local z = Lerp(frac, 0.514, 0.582)
-					local xy = Lerp(frac, 1.794, 1.636)
-					spineScale = Vector(z, xy, xy)
-					legScale = Vector(0.001, 0.001, 0.001)
-				elseif dt < 0.3 then
-					local frac = (dt - 0.2) / 0.1
-					local z = Lerp(frac, 0.582, 1.0)
-					local xy = Lerp(frac, 1.636, 1.0)
-					spineScale = Vector(z, xy, xy)
-					local legFrac = Lerp(frac, 0.001, 1.0)
-					legScale = Vector(legFrac, legFrac, legFrac)
+		-- pikmin surface projection based on Pikmin 2
+		if isCrushed then
+			if not self.MatrixApplied then
+				local mat = Matrix()
+				mat:Scale(Vector(2.2, 2.2, 0.001))
+				self:EnableMatrix("RenderMultiply", mat)
+				self.MatrixApplied = true
+			end
+			for i = 0, self:GetBoneCount() - 1 do
+				self:ManipulateBoneScale(i, Vector(1, 1, 1))
+				self:ManipulateBonePosition(i, Vector(0, 0, 0))
+			end
+		else
+			if self.MatrixApplied then
+				self:DisableMatrix("RenderMultiply")
+				self.MatrixApplied = nil
+			end
+			
+			if isBuried then
+				for i = 0, self:GetBoneCount() - 1 do
+					self:ManipulateBoneScale(i, Vector(1, 1, 1))
+				end
+				local progress = parent:GetNWFloat("BuryProgress", 0)
+				local zOffset = Lerp(progress, -34, 0)
+				self:ManipulateBonePosition(bone, Vector(zOffset, 0, 0))
+			else
+				self:ManipulateBonePosition(bone, Vector(0, 0, 0))
+				for i = 0, self:GetBoneCount() - 1 do
+					self:ManipulateBoneScale(i, Vector(1, 1, 1))
+				end
+				
+				if impactTime > 0 then
+					local dt = CurTime() - impactTime
+					if dt >= 0 and dt < 0.35 then
+						if dt < 0.1 then
+							local frac = dt / 0.1
+							local z = Lerp(frac, 0.488, 0.514)
+							local xy = Lerp(frac, 1.858, 1.794)
+							local spineScale = Vector(z, xy, xy)
+							local legScale = Vector(0.001, 0.001, 0.001)
+							
+							self:ManipulateBoneScale(bone, spineScale)
+							local lLeg = self:LookupBone("Pik_LL")
+							local rLeg = self:LookupBone("Pik_RL")
+							if lLeg then self:ManipulateBoneScale(lLeg, legScale) end
+							if rLeg then self:ManipulateBoneScale(rLeg, legScale) end
+						elseif dt < 0.2 then
+							local frac = (dt - 0.1) / 0.1
+							local z = Lerp(frac, 0.514, 0.582)
+							local xy = Lerp(frac, 1.794, 1.636)
+							local spineScale = Vector(z, xy, xy)
+							local legScale = Vector(0.001, 0.001, 0.001)
+							
+							self:ManipulateBoneScale(bone, spineScale)
+							local lLeg = self:LookupBone("Pik_LL")
+							local rLeg = self:LookupBone("Pik_RL")
+							if lLeg then self:ManipulateBoneScale(lLeg, legScale) end
+							if rLeg then self:ManipulateBoneScale(rLeg, legScale) end
+						elseif dt < 0.3 then
+							local frac = (dt - 0.2) / 0.1
+							local z = Lerp(frac, 0.582, 1.0)
+							local xy = Lerp(frac, 1.636, 1.0)
+							local spineScale = Vector(z, xy, xy)
+							local legFrac = Lerp(frac, 0.001, 1.0)
+							local legScale = Vector(legFrac, legFrac, legFrac)
+							
+							self:ManipulateBoneScale(bone, spineScale)
+							local lLeg = self:LookupBone("Pik_LL")
+							local rLeg = self:LookupBone("Pik_RL")
+							if lLeg then self:ManipulateBoneScale(lLeg, legScale) end
+							if rLeg then self:ManipulateBoneScale(rLeg, legScale) end
+						end
+					end
 				end
 			end
 		end
-		
-		self:ManipulateBoneScale(bone, spineScale)
-		
-		local lLeg = self:LookupBone("Pik_LL")
-		local rLeg = self:LookupBone("Pik_RL")
-		if lLeg then self:ManipulateBoneScale(lLeg, legScale) end
-		if rLeg then self:ManipulateBoneScale(rLeg, legScale) end
 	end
 end
 
