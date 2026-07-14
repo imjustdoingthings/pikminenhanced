@@ -33,6 +33,13 @@ function TOOL:LeftClick(trace)
 	ent:SetNWBool("iscarry",true)
 	ent.IsCarry = true
 	ent.PikMove = ent:GetNWInt("weight") >= mincarry
+	if SERVER then
+		duplicator.StoreEntityModifier(ent, "PikminCarry", {
+			iscarry = true,
+			pikiweight = mincarry,
+			pikimax = maxcarry
+		})
+	end
 	return true
 end
 
@@ -69,6 +76,17 @@ function TOOL:Reload(trace)
 	ent:SetNWInt("pikimax",autovalue2)
 	ent:SetNWBool("iscarry",dictInfo and true or false)
 	ent.PikMove = ent:GetNWInt("weight") >= autovalue
+	if SERVER then
+		if dictInfo then
+			duplicator.StoreEntityModifier(ent, "PikminCarry", {
+				iscarry = true,
+				pikiweight = autovalue,
+				pikimax = autovalue2
+			})
+		else
+			duplicator.ClearEntityModifier(ent, "PikminCarry")
+		end
+	end
 	return true
 end
 

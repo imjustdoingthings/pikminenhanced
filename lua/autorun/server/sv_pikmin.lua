@@ -679,3 +679,55 @@ timer.Create("PikminNPCTargetForceUpdate", 0.25, 0, function()
 		end
 	end
 end)
+
+--// carry property persistence
+duplicator.RegisterEntityModifier("PikminCarry", function(ply, ent, data)
+	if not IsValid(ent) then return end
+	if data.iscarry then
+		ent.DidWeight = true
+		ent.IsCarry = true
+		ent:SetNWBool("iscarry", true)
+		ent:SetNWInt("pikiweight", data.pikiweight)
+		ent:SetNWInt("pikimax", data.pikimax)
+		timer.Simple(0.1, function()
+			if IsValid(ent) and IsValid(ent:GetPhysicsObject()) then
+				ent:GetPhysicsObject():SetMass(data.pikiweight * 50)
+			end
+		end)
+	end
+end)
+
+--// auto-carry hook
+hook.Add("OnEntityCreated", "PikminAutoCarryAll", function(ent)
+	timer.Simple(0, function()
+		if not IsValid(ent) or ent:GetClass() ~= "prop_physics" then return end
+		if not cvars.Bool("pik_carry_all") then return end
+		
+		-- skip overwrites on entities with custom values
+		if ent.IsCarry then return end
+		
+		local phys = ent:GetPhysicsObject()
+		if not IsValid(phys) then return end
+		
+		if not ent.LastMass then ent.LastMass = phys:GetMass() end
+		local autovalue = math.max(1, math.floor(phys:GetMass() / 50))
+		local autovalue2 = autovalue * 2
+		local dictInfo = PikiCarryDict[ent:GetModel()]
+		if dictInfo then autovalue, autovalue2 = dictInfo[1], dictInfo[2] end
+		
+		ent.DidWeight = true
+		phys:SetMass(autovalue * 50)
+		ent:SetNWInt("pikiweight", autovalue)
+		ent:SetNWInt("pikimax", autovalue2)
+		ent:SetNWBool("iscarry", true)
+		ent.IsCarry = true
+		ent.PikMove = ent:GetNWInt("weight") >= autovalue
+		
+		-- store modifier so the auto-carry values persist on save/dupe
+		duplicator.StoreEntityModifier(ent, "PikminCarry", {
+			iscarry = true,
+			pikiweight = autovalue,
+			pikimax = autovalue2
+		})
+	end)
+end)

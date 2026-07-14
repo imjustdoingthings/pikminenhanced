@@ -639,3 +639,85 @@ hook.Add("UpdateAnimation", "PikminAlwaysLookStraight", function(ply, velocity, 
 		ply:SetPoseParameter("head_pitch", 0)
 	end
 end)
+
+--//  always render the carry property/amount
+if CLIENT then
+	surface.CreateFont("PIKICARRYBIG",
+	{
+		font = "Roboto",
+		size = 52,
+		weight = 500,
+		antialias = true,
+		blursize = 0,
+		scanlines = 0,
+		outline = false,
+	})
+	surface.CreateFont("PIKICARRY",
+	{
+		font = "Roboto",
+		size = 32,
+		weight = 500,
+		antialias = true,
+		blursize = 0,
+		scanlines = 0,
+		outline = false,
+	})
+end
+
+local color_white = Color(255, 255, 255, 255)
+local function DrawCarryOverlay(ent)
+	cam.IgnoreZ(true)
+	local pos = ent:WorldSpaceCenter()
+	local _, max = ent:WorldSpaceAABB()
+	
+	local ang = LocalPlayer():EyeAngles()
+	ang:RotateAroundAxis(LocalPlayer():GetForward(), 270)
+	ang:RotateAroundAxis(LocalPlayer():GetRight(), -180)
+	ang:RotateAroundAxis(LocalPlayer():GetUp(), 90)
+	ang = Angle(0, ang.y, ang.r)
+	
+	local scale = math.min(0.7, pos:Distance(LocalPlayer():GetPos()) / 256)
+	pos = Vector(pos.x, pos.y, max.z + 60 * scale)
+	
+	cam.Start3D2D(pos, ang, scale)
+	surface.SetTextColor(color_white)
+	surface.SetDrawColor(color_white)
+	
+	local req = ent:GetNWInt("pikiweight", 1)
+	local cur = ent:GetNWInt("weight", 0)
+	
+	surface.SetFont("PIKICARRYBIG")
+	local w1, h1 = surface.GetTextSize(req)
+	surface.SetTextPos(-w1 / 2, -h1 / 2)
+	surface.DrawText(req)
+	
+	surface.SetFont("PIKICARRY")
+	local w2, h2 = surface.GetTextSize(cur)
+	surface.DrawRect(-w1 / 2 - 4, h1 / 2 - 4, w1 + 8, 2)
+	surface.SetTextPos(-w2 / 2, h1 / 2 - 2)
+	surface.DrawText(cur)
+	
+	cam.End3D2D()
+	cam.IgnoreZ(false)
+end
+
+hook.Add("PreDrawEffects", "PikminAlwaysShowCarry", function()
+	if not GetConVar("pik_always_show_carry"):GetBool() then return end
+	
+	local localPly = LocalPlayer()
+	if not IsValid(localPly) then return end
+	
+	local maxDrawDist = 800 * 800
+	local plyPos = localPly:GetPos()
+	local activeToolEnt = EntityDraw
+	
+	for _, ent in ipairs(ents.FindByClass("prop_physics")) do
+		if IsValid(ent) and ent ~= activeToolEnt then
+			if ent:GetNWBool("iscarry") or (PikiCarryDict and PikiCarryDict[ent:GetModel()]) then
+				if ent:GetPos():DistToSqr(plyPos) <= maxDrawDist then
+					DrawCarryOverlay(ent)
+				end
+			end
+		end
+	end
+end)

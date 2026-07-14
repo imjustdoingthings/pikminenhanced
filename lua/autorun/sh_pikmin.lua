@@ -277,6 +277,8 @@ CreateConVar("piki_mesh","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable PikiMesh 
 CreateConVar("piki_mesh_spacing","1.0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"PikiMesh spacing multiplier (0.1 to 5.0)")
 CreateConVar("piki_mesh_shape","wedge",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"PikiMesh formation shape (wedge, circle, square, diamond, triangle, hexagon)")
 CreateConVar("pik_enable_crushing","1",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Enable falling props to crush soft-bodied Pikmin or bury Rock Pikmin")
+CreateConVar("pik_carry_all","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Automatically make all physics props carryable by Pikmin")
+CreateConVar("pik_always_show_carry","0",{FCVAR_REPLICATED, FCVAR_ARCHIVE},"Always display carry weight/minimum above carryable props")
 
 
 local PikminAdminRestrictedClasses = {
